@@ -444,7 +444,7 @@ export function ConversationWorkbench({
   };
 
   return (
-    <section className="conversation-workbench flex h-full flex-col bg-zinc-950">
+    <section className="conversation-workbench flex h-full flex-col bg-surface">
       {agentConfigPanel.open && selectedAgent && persona ? (
         <AgentConfigDrawer
           activeTab={agentConfigPanel.tab}
@@ -461,31 +461,31 @@ export function ConversationWorkbench({
         />
       ) : null}
 
-      <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-zinc-800/60 bg-zinc-950 px-4">
+      <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-surface px-4">
         <Popover>
           <PopoverTrigger asChild>
-            <button className="group flex min-w-0 items-center gap-3 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-zinc-900/60">
+            <button className="group flex min-w-0 items-center gap-3 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-surface/60">
               <AgentPortrait
                 initials={selectedAgentInitials}
                 state={selectedAgentState}
                 size="sm"
-                tintClassName="bg-violet-600/15 text-violet-300"
+                tintClassName="bg-primary/15 text-primary"
               />
               <div className="flex min-w-0 flex-col leading-tight">
-                <span className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-zinc-100">
+                <span className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-foreground">
                   <span className="truncate">{selectedAgentDisplayName}</span>
-                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-zinc-500 transition-transform group-data-[state=open]:rotate-180" />
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
                 </span>
-                <span className="truncate text-[11px] text-zinc-500">
+                <span className="truncate text-[11px] text-muted-foreground">
                   {selectedAgentSubtitle} · 대화 모델: {selectedAgentModelRouteLabel}
                 </span>
               </div>
             </button>
           </PopoverTrigger>
-          <PopoverContent align="start" className="w-80 border-zinc-800 bg-zinc-900/95 p-0 text-zinc-100 backdrop-blur-xl">
-            <div className="border-b border-zinc-800 px-4 py-3">
+          <PopoverContent align="start" className="w-80 border-border bg-surface/95 p-0 text-foreground backdrop-blur-xl">
+            <div className="border-b border-border px-4 py-3">
               <p className="text-sm font-medium">{selectedAgentDisplayName}</p>
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-muted-foreground">
                 전용 대화방 · {messages.length}개 메시지
               </p>
             </div>
@@ -515,7 +515,7 @@ export function ConversationWorkbench({
               <ConversationMetaRow icon={Wrench} label="도구" value={toolLabels.length > 0 ? toolLabels.join(", ") : "연결 대기"} />
               <ConversationMetaRow icon={Sparkles} label="연속성" value={agentChatContinuity.memoryQualityLabel} />
             </div>
-            <div className="grid grid-cols-2 gap-2 border-t border-zinc-800 p-2">
+            <div className="grid grid-cols-2 gap-2 border-t border-border p-2">
               <Button className="h-8 text-xs" onClick={() => onOpenAgentConfig("profile")} size="sm" variant="ghost">
                 프로필
               </Button>
@@ -586,7 +586,7 @@ export function ConversationWorkbench({
                 <FileText className="h-4 w-4" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="end" className="w-64 border-zinc-800 bg-zinc-900/95 p-2 text-zinc-100 backdrop-blur-xl">
+            <PopoverContent align="end" className="w-64 border-border bg-surface/95 p-2 text-foreground backdrop-blur-xl">
               <Button className="w-full justify-start text-xs" onClick={onCreateBranch} size="sm" variant="ghost">
                 <FileText className="h-3.5 w-3.5" />
                 분기 생성 ({branchExperiments.length})
@@ -616,12 +616,12 @@ export function ConversationWorkbench({
         <div
           className={`flex shrink-0 items-center gap-2 border-b px-4 py-1.5 text-[11px] ${
             conversationHeaderAlert.tone === "rose"
-              ? "border-rose-500/20 bg-rose-500/[0.06] text-rose-200"
-              : "border-amber-500/20 bg-amber-500/[0.06] text-amber-200"
+              ? "border-destructive/20 bg-destructive/[0.06] text-destructive"
+              : "border-warning/20 bg-warning/[0.06] text-warning"
           }`}
           role="status"
         >
-          <span className={`h-1.5 w-1.5 rounded-full ${conversationHeaderAlert.tone === "rose" ? "bg-rose-400" : "bg-amber-400"}`} />
+          <span className={`h-1.5 w-1.5 rounded-full ${conversationHeaderAlert.tone === "rose" ? "bg-destructive" : "bg-warning"}`} />
           {conversationHeaderAlert.label}
         </div>
       ) : null}
@@ -650,7 +650,7 @@ export function ConversationWorkbench({
             workStatusLabel={selectedAgentWorkStatusLabel}
           />
           {activeAgentDetailPanel !== "none" ? (
-            <div className="shrink-0 border-b border-zinc-900/80 bg-zinc-950/90 px-4 py-2">
+            <div className="shrink-0 border-b border-border bg-surface/90 px-4 py-2">
               <div className="mx-auto max-w-5xl">
                 {activeAgentDetailPanel === "memory" ? (
                   <div className="grid gap-2 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
@@ -719,11 +719,11 @@ export function ConversationWorkbench({
       {viewMode === "agents" && selectedAgent?.role === "orchestrator" && onCreateDelegationAssignment &&
        (makimaDelegationCards.length > 0 || backgroundAssignmentCount > 0) && sidePanelMode !== "background" ? (
         <button
-          className="flex shrink-0 items-center gap-2 border-b border-white/10 bg-violet-500/[0.07] px-4 py-1.5 text-left text-[11.5px] text-violet-200 transition hover:bg-violet-500/[0.12]"
+          className="flex shrink-0 items-center gap-2 border-b border-white/10 bg-primary/[0.07] px-4 py-1.5 text-left text-[11.5px] text-primary transition hover:bg-primary/[0.12]"
           onClick={() => setSidePanelMode("background")}
           type="button"
         >
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-violet-400" />
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
           백그라운드 작업 — 위임 후보 {makimaDelegationCards.length}건 · 출격 {backgroundAssignmentCount}명 (패널에서 보기)
         </button>
       ) : null}
@@ -881,8 +881,8 @@ function UsageHudChip({
     <span
       className={`hidden items-center gap-1.5 rounded-full border px-2 py-1 text-[10.5px] tabular-nums md:inline-flex ${
         warning
-          ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
-          : "border-zinc-800/80 bg-zinc-900/70 text-zinc-400"
+          ? "border-warning/40 bg-warning/10 text-warning"
+          : "border-border bg-surface/70 text-muted-foreground"
       }`}
       data-testid="conversation-usage-hud"
       title={`입력 ${usage.inputTokens.toLocaleString()} · 출력 ${usage.outputTokens.toLocaleString()} 토큰 · ${usage.turns}턴${
@@ -894,7 +894,7 @@ function UsageHudChip({
       {costUsd !== undefined ? <span>· ${costUsd >= 0.01 ? costUsd.toFixed(2) : costUsd.toFixed(4)}</span> : null}
       {contextWindow && percent > 0 ? <span className={warning ? "font-semibold" : ""}>· {percent}%</span> : null}
       {compactedVersion ? (
-        <span className="rounded-full bg-cyan-500/15 px-1.5 text-cyan-300">압축됨 v{compactedVersion}</span>
+        <span className="rounded-full bg-primary/15 px-1.5 text-primary">압축됨 v{compactedVersion}</span>
       ) : null}
     </span>
   );
@@ -910,12 +910,12 @@ function ConversationMetaRow({
   value: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-md px-3 py-2 hover:bg-zinc-800/40">
-      <span className="flex items-center gap-2 text-xs text-zinc-500">
+    <div className="flex items-center justify-between gap-3 rounded-md px-3 py-2 hover:bg-surface/40">
+      <span className="flex items-center gap-2 text-xs text-muted-foreground">
         <Icon className="h-3.5 w-3.5" />
         {label}
       </span>
-      <span className="min-w-0 truncate text-right text-xs font-medium text-zinc-100">{value}</span>
+      <span className="min-w-0 truncate text-right text-xs font-medium text-foreground">{value}</span>
     </div>
   );
 }
@@ -957,7 +957,7 @@ function ForkConversationButton({
   return (
     <div className="border-b border-white/10 p-3">
       <button
-        className="flex w-full items-center justify-center gap-2 rounded-xl border border-violet-300/30 bg-violet-500/10 px-3 py-2.5 text-[12.5px] font-semibold text-violet-100 transition-colors hover:bg-violet-500/20 disabled:opacity-40"
+        className="flex w-full items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-3 py-2.5 text-[12.5px] font-semibold text-primary transition-colors hover:bg-primary/20 disabled:opacity-40"
         disabled={!canFork}
         onClick={() => {
           const brief = buildForkBrief({ messages, draft });
@@ -970,12 +970,12 @@ function ForkConversationButton({
         <GitFork className="h-4 w-4" /> 이 대화를 worker로 포크
       </button>
       {forked ? (
-        <p className="mt-2 text-[11px] leading-relaxed text-emerald-200">
+        <p className="mt-2 text-[11px] leading-relaxed text-primary">
           포크됨 — <span className="font-semibold">{forked}</span>. 코딩 탭의 Mission Board에서 격리 worker(worktree·tmux)로 이어집니다.
           자동 병합은 막혀 있고 diff/verify 게이트를 거칩니다.
         </p>
       ) : (
-        <p className="mt-2 text-[11px] leading-relaxed text-zinc-500">
+        <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
           현재 대화의 맥락과 @멘션 파일을 brief로 묶어 격리 worker 미션을 만듭니다.
         </p>
       )}

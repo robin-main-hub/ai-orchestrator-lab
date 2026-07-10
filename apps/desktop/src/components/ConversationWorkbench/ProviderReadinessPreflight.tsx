@@ -33,21 +33,21 @@ export function ProviderReadinessPreflight({
           <copy.icon className="h-3 w-3" />
           {copy.title}
         </span>
-        <span className="rounded-full border border-white/10 bg-black/25 px-2.5 py-1 text-[11px] text-zinc-200">
+        <span className="rounded-full border border-white/10 bg-black/25 px-2.5 py-1 text-[11px] text-foreground">
           모델 연결명: {providerName} · {modelLabel}
         </span>
-        <span className="min-w-0 flex-1 text-[11px] leading-relaxed text-zinc-400">
+        <span className="min-w-0 flex-1 text-[11px] leading-relaxed text-muted-foreground">
           {copy.description}
           {pendingRetryAgentName ? ` · ${pendingRetryAgentName} 메시지는 승인되면 이어서 전송됩니다.` : ""}
         </span>
         {readiness.reason ? (
-          <span className="max-w-sm truncate rounded-full border border-white/10 bg-zinc-950/60 px-2.5 py-1 text-[11px] text-zinc-300">
+          <span className="max-w-sm truncate rounded-full border border-white/10 bg-surface/60 px-2.5 py-1 text-[11px] text-foreground">
             {providerReadinessReasonLabel(readiness.reason)}
           </span>
         ) : null}
         {readiness.warnings.map((warning) => (
           <span
-            className="rounded-full border border-white/10 bg-zinc-950/60 px-2 py-0.5 text-[10px] text-zinc-400"
+            className="rounded-full border border-white/10 bg-surface/60 px-2 py-0.5 text-[10px] text-muted-foreground"
             key={warning}
           >
             {ingressPermissionLabel(warning)}
@@ -61,9 +61,9 @@ export function ProviderReadinessPreflight({
 function copyForReadiness(readiness: ProviderRuntimeReadiness, hasPendingRetry: boolean) {
   if (readiness.status === "needs_approval" || hasPendingRetry) {
     return {
-      badgeClassName: "border-amber-300/30 bg-amber-400/10 text-amber-100",
+      badgeClassName: "border-warning/30 bg-warning/10 text-warning",
       description: "원격 모델 호출에 운영자 승인이 필요합니다. 승인되면 이어서 전송됩니다.",
-      frameClassName: "border-amber-300/10 bg-amber-950/[0.08]",
+      frameClassName: "border-warning/10 bg-warning/[0.08]",
       icon: ShieldAlert,
       title: "승인 대기",
     };
@@ -71,18 +71,18 @@ function copyForReadiness(readiness: ProviderRuntimeReadiness, hasPendingRetry: 
 
   if (readiness.status === "credential_required" || readiness.status === "blocked") {
     return {
-      badgeClassName: "border-rose-300/30 bg-rose-400/10 text-rose-100",
+      badgeClassName: "border-destructive/30 bg-destructive/10 text-destructive",
       description: "설정 또는 승인 상태를 먼저 확인해야 대화 호출이 실패하지 않습니다.",
-      frameClassName: "border-rose-300/10 bg-rose-950/[0.08]",
+      frameClassName: "border-destructive/10 bg-destructive/[0.08]",
       icon: AlertTriangle,
       title: "보내기 전 확인 필요",
     };
   }
 
   return {
-    badgeClassName: "border-violet-300/25 bg-violet-400/10 text-violet-100",
+    badgeClassName: "border-primary/25 bg-primary/10 text-primary",
     description: "모델 연결은 준비됐지만 참고 경고가 있습니다.",
-    frameClassName: "border-violet-300/10 bg-violet-950/[0.08]",
+    frameClassName: "border-primary/10 bg-primary/[0.08]",
     icon: CheckCircle2,
     title: "참고 경고",
   };

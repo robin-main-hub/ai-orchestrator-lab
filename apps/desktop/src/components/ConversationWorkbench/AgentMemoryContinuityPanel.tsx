@@ -47,20 +47,20 @@ export function AgentMemoryContinuityPanel({
       : "도구 단서 대기";
 
   return (
-    <section className="rounded-lg border border-violet-300/10 bg-violet-400/[0.035] p-3">
+    <section className="rounded-lg border border-primary/10 bg-primary/[0.035] p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-violet-200/80">
+          <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-primary/80">
             <BrainCircuit className="h-3 w-3" />
             함께 기억하는 것
           </p>
-          <p className="mt-1 text-sm font-semibold text-zinc-100">{agentName ?? "선택 에이전트"}가 이어받는 맥락</p>
-          <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
+          <p className="mt-1 text-sm font-semibold text-foreground">{agentName ?? "선택 에이전트"}가 이어받는 맥락</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
             {summary.detail}. 필요한 단서만 답변에 반영하고, 기억 원문은 이 카드에 그대로 드러내지 않습니다.
           </p>
         </div>
-        <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/10 bg-black/30 px-2 py-1 text-[10px] font-medium text-zinc-200">
-          <Database className="h-3 w-3 text-violet-200" />
+        <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/10 bg-black/30 px-2 py-1 text-[10px] font-medium text-foreground">
+          <Database className="h-3 w-3 text-primary" />
           {memoryLabel}
         </span>
       </div>
@@ -123,21 +123,21 @@ function MemoryContinuityBadge({
       <span className="min-w-0">
         <span className="block truncate font-medium">{label}</span>
         <span className="block truncate opacity-70">{detail}</span>
-        {actionLabel ? <span className="block text-[9px] text-cyan-200/80">{actionLabel}</span> : null}
+        {actionLabel ? <span className="block text-[9px] text-primary/80">{actionLabel}</span> : null}
       </span>
     </>
   );
 
   const className = `inline-flex min-w-0 items-start gap-1.5 rounded-md border px-2 py-1.5 text-left text-[10px] ${
     tone === "ready"
-      ? "border-violet-300/20 bg-violet-400/10 text-violet-100"
-      : "border-zinc-700/70 bg-zinc-950/50 text-zinc-500"
+      ? "border-primary/20 bg-primary/10 text-primary"
+      : "border-border bg-surface/50 text-muted-foreground"
   }`;
 
   if (onClick) {
     return (
       <button
-        className={`${className} transition hover:border-cyan-300/35 hover:bg-cyan-400/[0.07] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40`}
+        className={`${className} transition hover:border-primary/35 hover:bg-primary/[0.07] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40`}
         onClick={onClick}
         type="button"
       >

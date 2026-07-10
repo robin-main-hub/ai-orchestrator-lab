@@ -28,7 +28,7 @@ describe("AgentLiveWorkStatus", () => {
     expect(html).toContain("대화에 남길 요약 정리");
     expect(html).not.toContain("cyan");
     expect(html).not.toContain("emerald");
-    expect(html).toContain("violet");
-    expect(html).toContain("amber");
+    expect(html).toContain("primary");
+    expect(html).toContain("warning");
   });
 });

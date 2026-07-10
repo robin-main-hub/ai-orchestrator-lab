@@ -50,7 +50,7 @@ export function ConversationAgentRail({
   return (
     <nav
       aria-label="에이전트 빠른 전환"
-      className="flex w-[60px] shrink-0 flex-col items-center gap-1.5 overflow-y-auto border-r border-zinc-800/60 bg-zinc-950/80 py-3"
+      className="flex w-[60px] shrink-0 flex-col items-center gap-1.5 overflow-y-auto border-r border-border bg-surface/80 py-3"
     >
       {agents.map((agent) => {
         const active = agent.id === selectedAgentId;
@@ -70,7 +70,7 @@ export function ConversationAgentRail({
           >
             {/* 활성 표시 — 좌측 필 (Discord 패턴) */}
             <span
-              className={`absolute left-0 w-[3px] rounded-r-full bg-violet-400 transition-all ${
+              className={`absolute left-0 w-[3px] rounded-r-full bg-primary transition-all ${
                 active ? "h-7 opacity-100" : "h-0 opacity-0 group-hover:h-3 group-hover:opacity-60"
               }`}
             />
@@ -109,21 +109,21 @@ export function ConversationAgentSpotlight({
   if (!agent) return null;
   const portrait = resolveAgentExpressionPortrait(agent, { activity, visuals });
   const speaking = isSpeakingActivity(activity);
-  const attention = activity === "waiting_approval" ? "border-amber-400/40" : activity === "error" ? "border-rose-400/40" : "border-zinc-800/60";
+  const attention = activity === "waiting_approval" ? "border-warning/40" : activity === "error" ? "border-destructive/40" : "border-border";
   return (
-    <div className={`flex shrink-0 items-center gap-3 border-b bg-zinc-950/70 px-4 py-2 ${attention}`}>
+    <div className={`flex shrink-0 items-center gap-3 border-b bg-surface/70 px-4 py-2 ${attention}`}>
       <div
-        className={`flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-violet-600/10 ring-1 ring-white/5 ${speaking ? "conversation-speaking" : ""}`}
+        className={`flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary/10 ring-1 ring-white/5 ${speaking ? "conversation-speaking" : ""}`}
       >
         {portrait ? (
           <img alt={displayName} className="h-full w-full object-cover" src={portrait} />
         ) : (
-          <span className="font-mono text-sm text-violet-200">{agentInitialsForDisplay(agent)}</span>
+          <span className="font-mono text-sm text-primary">{agentInitialsForDisplay(agent)}</span>
         )}
       </div>
       <div className="flex min-w-0 flex-col leading-tight">
-        <span className="truncate text-sm font-medium text-zinc-100">{displayName}</span>
-        <span className="truncate text-[11.5px] text-zinc-400">{workStatusLabel}</span>
+        <span className="truncate text-sm font-medium text-foreground">{displayName}</span>
+        <span className="truncate text-[11.5px] text-muted-foreground">{workStatusLabel}</span>
       </div>
     </div>
   );

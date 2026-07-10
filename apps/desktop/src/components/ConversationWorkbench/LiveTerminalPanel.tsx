@@ -135,18 +135,18 @@ export function LiveTerminalPanel({
   };
 
   const statusBadge = {
-    idle: { label: "대기", tone: "text-zinc-500" },
-    polling: { label: "갱신 중", tone: "text-cyan-300" },
-    live: { label: "● LIVE", tone: "text-emerald-400" },
-    disabled: { label: "send-keys 비활성", tone: "text-amber-400" },
-    error: { label: "오프라인", tone: "text-rose-400" },
+    idle: { label: "대기", tone: "text-muted-foreground" },
+    polling: { label: "갱신 중", tone: "text-primary" },
+    live: { label: "● LIVE", tone: "text-primary" },
+    disabled: { label: "send-keys 비활성", tone: "text-warning" },
+    error: { label: "오프라인", tone: "text-destructive" },
   }[state.status];
 
   return (
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 items-center gap-2 border-b border-white/10 px-3 py-2">
         <select
-          className="rounded-md border border-white/10 bg-black/40 px-2 py-1 text-[11px] text-zinc-200"
+          className="rounded-md border border-white/10 bg-black/40 px-2 py-1 text-[11px] text-foreground"
           onChange={(event) => setState((prev) => setRole(prev, event.target.value as TmuxPaneRole))}
           value={state.role}
         >
@@ -157,11 +157,11 @@ export function LiveTerminalPanel({
           ))}
         </select>
         <span className={`text-[10px] font-semibold ${statusBadge.tone}`}>{statusBadge.label}</span>
-        {state.paneId ? <span className="font-mono text-[10px] text-zinc-600">{state.paneId}</span> : null}
+        {state.paneId ? <span className="font-mono text-[10px] text-muted-foreground">{state.paneId}</span> : null}
         <span className="flex-1" />
         <button
           aria-label={auto ? "자동 갱신 끄기" : "자동 갱신 켜기"}
-          className="rounded-md p-1 text-zinc-400 hover:bg-white/5 hover:text-zinc-100"
+          className="rounded-md p-1 text-muted-foreground hover:bg-white/5 hover:text-foreground"
           onClick={() => setAuto((value) => !value)}
           title={auto ? "자동 갱신 중 (2초)" : "자동 갱신 꺼짐"}
           type="button"
@@ -170,7 +170,7 @@ export function LiveTerminalPanel({
         </button>
         <button
           aria-label="지금 갱신"
-          className="rounded-md p-1 text-zinc-400 hover:bg-white/5 hover:text-zinc-100"
+          className="rounded-md p-1 text-muted-foreground hover:bg-white/5 hover:text-foreground"
           onClick={() => void captureOnce()}
           title="지금 갱신"
           type="button"
@@ -191,7 +191,7 @@ export function LiveTerminalPanel({
       <div className="shrink-0 border-t border-white/10 p-2">
         <div className="flex items-end gap-2">
           <input
-            className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-2 font-mono text-[12px] text-zinc-100 outline-none focus-visible:border-cyan-400/40"
+            className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-2 font-mono text-[12px] text-foreground outline-none focus-visible:border-primary/40"
             onChange={(event) => setCommand(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.nativeEvent.isComposing) {
@@ -203,7 +203,7 @@ export function LiveTerminalPanel({
             value={command}
           />
           <button
-            className="flex shrink-0 items-center gap-1 rounded-lg border border-cyan-300/30 bg-cyan-400/10 px-3 py-2 text-[12px] font-semibold text-cyan-100 disabled:opacity-40"
+            className="flex shrink-0 items-center gap-1 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-[12px] font-semibold text-primary disabled:opacity-40"
             disabled={sending || !command.trim()}
             onClick={() => void onSend()}
             type="button"
@@ -211,7 +211,7 @@ export function LiveTerminalPanel({
             <SendHorizontal className="h-3.5 w-3.5" /> 전송
           </button>
         </div>
-        {sendNote ? <p className="mt-1 px-1 text-[10.5px] text-zinc-500">{sendNote}</p> : null}
+        {sendNote ? <p className="mt-1 px-1 text-[10.5px] text-muted-foreground">{sendNote}</p> : null}
       </div>
     </div>
   );

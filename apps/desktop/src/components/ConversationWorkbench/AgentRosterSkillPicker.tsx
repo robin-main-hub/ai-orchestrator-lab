@@ -33,10 +33,10 @@ export function AgentRosterSkillPicker({
     <div className="space-y-2 p-2">
       <div className="flex items-center justify-between gap-2 px-2">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">대화 동료 선택</p>
-          <p className="text-xs text-zinc-400">이름, 역할, 스킬, 모델을 보고 바로 전환합니다.</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">대화 동료 선택</p>
+          <p className="text-xs text-muted-foreground">이름, 역할, 스킬, 모델을 보고 바로 전환합니다.</p>
         </div>
-        <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] text-zinc-400">
+        <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] text-muted-foreground">
           {agents.length}명
         </span>
       </div>
@@ -53,14 +53,14 @@ export function AgentRosterSkillPicker({
             <article
               className={`group w-full rounded-xl border px-3 py-2.5 text-left transition ${
                 selected
-                  ? "border-cyan-300/35 bg-cyan-400/10 shadow-[0_0_26px_rgba(34,211,238,0.08)]"
-                  : "border-zinc-800/80 bg-zinc-950/55 hover:border-zinc-700 hover:bg-zinc-900/80"
+                  ? "border-primary/35 bg-primary/10 shadow-[0_0_26px_var(--accent-dim)]"
+                  : "border-border bg-surface/55 hover:border-border hover:bg-surface/80"
               }`}
               key={agent.id}
             >
               <button
                 aria-current={selected ? "true" : undefined}
-                className="flex w-full items-start gap-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40"
+                className="flex w-full items-start gap-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                 onClick={() => onSelectAgent(agent.id)}
                 type="button"
               >
@@ -68,15 +68,15 @@ export function AgentRosterSkillPicker({
                   avatarUrl={portraitUrl}
                   initials={agentInitialsForDisplay(agent)}
                   state={state}
-                  tintClassName={selected ? "bg-cyan-400/15 text-cyan-100" : "bg-violet-500/10 text-violet-200"}
+                  tintClassName={selected ? "bg-primary/15 text-primary" : "bg-primary/10 text-primary"}
                 />
                 <div className="min-w-0 flex-1">
                   <div className="flex min-w-0 items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-zinc-100">{agentPrimaryDisplayName(agent)}</p>
-                      <p className="truncate text-[11px] text-zinc-500">{agentSecondaryDisplayLabel(agent)}</p>
+                      <p className="truncate text-sm font-semibold text-foreground">{agentPrimaryDisplayName(agent)}</p>
+                      <p className="truncate text-[11px] text-muted-foreground">{agentSecondaryDisplayLabel(agent)}</p>
                     </div>
-                    {selected ? <CheckCircle2 className="h-4 w-4 shrink-0 text-cyan-200" /> : null}
+                    {selected ? <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" /> : null}
                   </div>
                 </div>
               </button>
@@ -116,13 +116,13 @@ function RosterAction({
 }) {
   return (
     <button
-      className="inline-flex min-w-0 items-center justify-center gap-1 rounded-lg border border-white/10 bg-black/20 px-2 py-1 text-[10px] font-medium text-zinc-400 transition hover:border-cyan-300/30 hover:bg-cyan-400/10 hover:text-cyan-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/35 disabled:cursor-not-allowed disabled:opacity-50"
+      className="inline-flex min-w-0 items-center justify-center gap-1 rounded-lg border border-white/10 bg-black/20 px-2 py-1 text-[10px] font-medium text-muted-foreground transition hover:border-primary/30 hover:bg-primary/10 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-50"
       disabled={!onClick}
       onClick={onClick}
       title={title}
       type="button"
     >
-      <Icon className="h-3 w-3 shrink-0 text-cyan-200/60" />
+      <Icon className="h-3 w-3 shrink-0 text-primary/60" />
       <span className="whitespace-nowrap">{label}</span>
     </button>
   );

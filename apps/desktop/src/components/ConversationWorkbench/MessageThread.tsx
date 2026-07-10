@@ -108,8 +108,8 @@ export function MessageThread({
     !hasStreamContent && shouldShowAssistantPendingBubble(messages, thinkingIndicator?.status);
 
   return (
-    <div className="relative flex-1 overflow-hidden bg-zinc-950">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,0.12),transparent_32%),radial-gradient(circle_at_84%_18%,rgba(139,92,246,0.12),transparent_32%)]" />
+    <div className="relative flex-1 overflow-hidden bg-background">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(1200px_420px_at_78%_-10%,var(--accent-dim),transparent)]" />
       <div
         className="relative flex h-full flex-col gap-3 overflow-y-auto px-4 py-5"
         aria-label="대화 기록"
@@ -319,11 +319,11 @@ function AssistantPendingBubble({
       />
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-center gap-2 px-1">
-          <span className="text-xs font-semibold text-zinc-200">{displayName}</span>
-          <span className="text-[10px] text-zinc-600">{label}</span>
+          <span className="text-xs font-semibold text-foreground">{displayName}</span>
+          <span className="text-[10px] text-muted-foreground">{label}</span>
         </div>
-        <div className="inline-flex max-w-[82%] items-center gap-3 rounded-2xl rounded-tl-md border border-violet-300/15 bg-zinc-900/80 px-3 py-2.5 shadow-lg shadow-black/20 backdrop-blur-xl">
-          <span className="text-sm text-zinc-300">{compactPublicText(narration || assistantPendingLabel(activity), 88)}</span>
+        <div className="inline-flex max-w-[82%] items-center gap-3 rounded-2xl rounded-tl-md border border-primary/15 bg-surface/80 px-3 py-2.5 shadow-lg shadow-black/20 backdrop-blur-xl">
+          <span className="text-sm text-foreground">{compactPublicText(narration || assistantPendingLabel(activity), 88)}</span>
           <span className="flex items-center gap-1" aria-hidden="true">
             <span className="message-thinking-dot" />
             <span className="message-thinking-dot [animation-delay:160ms]" />
@@ -335,20 +335,20 @@ function AssistantPendingBubble({
             <span
               className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] ${
                 step.state === "done"
-                  ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-200"
+                  ? "border-primary/20 bg-primary/10 text-primary"
                   : step.state === "active"
-                    ? "border-cyan-400/25 bg-cyan-500/10 text-cyan-100"
-                    : "border-zinc-700/60 bg-zinc-900/60 text-zinc-500"
+                    ? "border-primary/25 bg-primary/10 text-primary"
+                    : "border-border bg-surface/60 text-muted-foreground"
               }`}
               key={step.label}
             >
               <span
                 className={`h-1.5 w-1.5 rounded-full ${
                   step.state === "active"
-                    ? "animate-pulse bg-cyan-300"
+                    ? "animate-pulse bg-primary"
                     : step.state === "done"
-                      ? "bg-emerald-300"
-                      : "bg-zinc-600"
+                      ? "bg-primary"
+                      : "bg-muted-foreground"
                 }`}
               />
               {step.label}
@@ -399,15 +399,15 @@ function StreamingDraftBubble({
       />
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-center gap-2 px-1">
-          <span className="text-xs font-semibold text-zinc-200">{displayName}</span>
-          <span className="text-[10px] text-cyan-400">{statusLabel}</span>
+          <span className="text-xs font-semibold text-foreground">{displayName}</span>
+          <span className="text-[10px] text-primary">{statusLabel}</span>
         </div>
-        <div className="rounded-2xl rounded-tl-md border border-cyan-300/15 bg-zinc-900/70 p-3 shadow-lg shadow-black/20 backdrop-blur-xl">
+        <div className="rounded-2xl rounded-tl-md border border-primary/15 bg-surface/70 p-3 shadow-lg shadow-black/20 backdrop-blur-xl">
           {text.trim() ? (
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
               {text}
               {!pendingApproval ? (
-                <span className="ml-0.5 inline-block h-4 w-[2px] animate-pulse bg-cyan-300 align-middle" aria-hidden="true" />
+                <span className="ml-0.5 inline-block h-4 w-[2px] animate-pulse bg-primary align-middle" aria-hidden="true" />
               ) : null}
             </p>
           ) : null}
@@ -420,11 +420,11 @@ function StreamingDraftBubble({
           ) : null}
           {pendingApproval ? (
             <div
-              className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2"
+              className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2"
               data-testid="streaming-approval-actions"
             >
-              <ShieldAlert className="h-3.5 w-3.5 shrink-0 text-amber-300" />
-              <span className="text-[11px] text-amber-200">이 명령을 실행할까요?</span>
+              <ShieldAlert className="h-3.5 w-3.5 shrink-0 text-warning" />
+              <span className="text-[11px] text-warning">이 명령을 실행할까요?</span>
               <div className="flex flex-wrap gap-1.5">
                 <Button
                   className="h-7 gap-1 text-xs"
@@ -434,7 +434,7 @@ function StreamingDraftBubble({
                   <Check className="h-3 w-3" /> 허용
                 </Button>
                 <Button
-                  className="h-7 gap-1 text-xs text-cyan-200"
+                  className="h-7 gap-1 text-xs text-primary"
                   onClick={() => {
                     onApprovePattern?.(pendingApproval.command);
                     onApprove?.(pendingApproval.sourceItemId);
@@ -446,7 +446,7 @@ function StreamingDraftBubble({
                   <Check className="h-3 w-3" /> 계열 허용
                 </Button>
                 <Button
-                  className="h-7 gap-1 text-xs text-red-200"
+                  className="h-7 gap-1 text-xs text-destructive"
                   onClick={() => onReject?.(pendingApproval.sourceItemId)}
                   size="sm"
                   variant="ghost"
@@ -478,12 +478,12 @@ function EmptyConversation({
       {portraitUrl ? (
         <img
           alt={agentName ?? "에이전트"}
-          className="h-20 w-20 rounded-2xl border border-violet-300/30 object-cover shadow-[0_0_40px_rgba(167,139,250,0.25)] ring-1 ring-white/10"
+          className="h-20 w-20 rounded-2xl border border-primary/30 object-cover shadow-[0_0_40px_var(--accent-dim)] ring-1 ring-white/10"
           src={portraitUrl}
         />
       ) : (
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-cyan-400/25 bg-cyan-400/10 shadow-[0_0_32px_rgba(34,211,238,0.18)]">
-          <Sparkles className="h-6 w-6 text-cyan-300" />
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/25 bg-primary/10 shadow-[0_0_32px_var(--accent-dim)]">
+          <Sparkles className="h-6 w-6 text-primary" />
         </div>
       )}
       {/* 제안7: 맥락 힌트 — 공급자/승인/기억 상태에 따른 "지금 먼저 할 것" */}
@@ -491,32 +491,32 @@ function EmptyConversation({
         <div
           className={`mt-5 flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] ${
             hint.tone === "amber"
-              ? "border-amber-400/30 bg-amber-500/10 text-amber-200"
+              ? "border-warning/30 bg-warning/10 text-warning"
               : hint.tone === "cyan"
-                ? "border-cyan-400/25 bg-cyan-500/10 text-cyan-200"
-                : "border-white/10 bg-white/5 text-zinc-300"
+                ? "border-primary/25 bg-primary/10 text-primary"
+                : "border-white/10 bg-white/5 text-foreground"
           }`}
           role="status"
         >
           <span
             className={`h-1.5 w-1.5 rounded-full ${
-              hint.tone === "amber" ? "bg-amber-400" : hint.tone === "cyan" ? "bg-cyan-400" : "bg-zinc-500"
+              hint.tone === "amber" ? "bg-warning" : hint.tone === "cyan" ? "bg-primary" : "bg-muted-foreground"
             }`}
           />
           {hint.suggestion}
         </div>
       ) : null}
-      <h3 className={`${hint ? "mt-3" : "mt-5"} text-base font-semibold text-zinc-100`}>
+      <h3 className={`${hint ? "mt-3" : "mt-5"} text-base font-semibold text-foreground`}>
         {summary.title}
       </h3>
-      <p className="mt-2 max-w-sm text-xs leading-relaxed text-zinc-500">
-        <span className="mb-1 inline-flex rounded-full border border-violet-300/20 bg-violet-400/10 px-2 py-0.5 text-[10px] text-violet-100">
+      <p className="mt-2 max-w-sm text-xs leading-relaxed text-muted-foreground">
+        <span className="mb-1 inline-flex rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] text-primary">
           {summary.memoryQualityLabel}
         </span>
         <br />
         {summary.detail}
         <br />
-        <kbd className="mt-2 inline-flex rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-zinc-300">
+        <kbd className="mt-2 inline-flex rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-foreground">
           ⌘K
         </kbd>
         로 역할 전환.
@@ -557,10 +557,10 @@ function MessageBubble({
       <div className="flex justify-end gap-2 py-1.5">
         <div className="max-w-[82%] space-y-1">
           <div className="flex items-center justify-end gap-2 px-1">
-            <span className="text-[10px] text-zinc-600">{time}</span>
-            <span className="text-xs font-medium text-zinc-300">사용자</span>
+            <span className="text-[10px] text-muted-foreground">{time}</span>
+            <span className="text-xs font-medium text-foreground">사용자</span>
           </div>
-          <div className="rounded-2xl rounded-tr-md border border-cyan-300/20 bg-gradient-to-br from-cyan-500 to-violet-500 p-3 shadow-lg shadow-cyan-950/30">
+          <div className="rounded-2xl rounded-tr-md border border-primary/20 bg-primary p-3 shadow-lg shadow-black/20">
             <p className="whitespace-pre-wrap text-sm leading-relaxed text-white">
               {message.content}
             </p>
@@ -570,7 +570,7 @@ function MessageBubble({
             <PublicWorkTracePanel trace={publicWorkTrace} />
           </div>
         </div>
-        <div className="mt-5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-cyan-200/30 bg-cyan-500/20 text-cyan-100 shadow-[0_0_20px_rgba(34,211,238,0.22)]">
+        <div className="mt-5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/20 text-primary shadow-[0_0_20px_var(--accent-dim)]">
           <UserRound className="h-4 w-4" />
         </div>
       </div>
@@ -609,12 +609,12 @@ function MessageBubble({
       />
       <div className="min-w-0 flex-1 space-y-1">
         <div className="group flex items-center gap-2 px-1">
-          <span className="text-xs font-semibold text-zinc-200">{label}</span>
-          <span className="text-[10px] text-zinc-600">{time}</span>
+          <span className="text-xs font-semibold text-foreground">{label}</span>
+          <span className="text-[10px] text-muted-foreground">{time}</span>
           {onRollbackTurn && message.metadata?.notice !== true ? (
             <button
               aria-label="이 턴으로 되돌리기"
-              className="ml-auto hidden items-center gap-1 rounded-md border border-zinc-700/70 bg-zinc-900/80 px-1.5 py-0.5 text-[10px] text-zinc-400 transition hover:border-amber-400/40 hover:text-amber-200 group-hover:inline-flex"
+              className="ml-auto hidden items-center gap-1 rounded-md border border-border bg-surface/80 px-1.5 py-0.5 text-[10px] text-muted-foreground transition hover:border-warning/40 hover:text-warning group-hover:inline-flex"
               onClick={() => onRollbackTurn(message.id)}
               title="이 턴(사용자 메시지 포함)을 대화에서 제거합니다 — 파일은 자동 복원되지 않음"
               type="button"
@@ -623,8 +623,8 @@ function MessageBubble({
             </button>
           ) : null}
         </div>
-        <div className="rounded-2xl rounded-tl-md border border-white/10 bg-zinc-900/70 p-3 shadow-lg shadow-black/20 backdrop-blur-xl">
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
+        <div className="rounded-2xl rounded-tl-md border border-white/10 bg-surface/70 p-3 shadow-lg shadow-black/20 backdrop-blur-xl">
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
             {message.content}
           </p>
           {toolCallChips.length > 0 ? (
@@ -640,7 +640,7 @@ function MessageBubble({
           {assistantStatusSummary ? (
             <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-2.5 py-2">
               <StatusBadge variant={assistantStatusSummary.variant}>{assistantStatusSummary.label}</StatusBadge>
-              <span className="text-[10px] leading-relaxed text-zinc-400">
+              <span className="text-[10px] leading-relaxed text-muted-foreground">
                 {assistantStatusSummary.detail}
               </span>
             </div>
@@ -711,20 +711,20 @@ function ToolCallChip({ call }: { call: MessageToolCallChipData }) {
               ? "대기"
               : call.status;
   return (
-    <div className={`rounded-xl border bg-black/25 ${isActive ? "border-cyan-400/30" : "border-white/10"}`}>
+    <div className={`rounded-xl border bg-black/25 ${isActive ? "border-primary/30" : "border-white/10"}`}>
       <button
         className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left"
         onClick={() => setExpanded((value) => !value)}
         type="button"
       >
-        <TerminalSquare className={`h-3.5 w-3.5 shrink-0 ${isActive ? "animate-pulse text-cyan-300" : "text-cyan-300"}`} />
-        <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-300">{call.title}</span>
+        <TerminalSquare className={`h-3.5 w-3.5 shrink-0 ${isActive ? "animate-pulse text-primary" : "text-primary"}`} />
+        <span className="min-w-0 flex-1 truncate text-[11px] text-foreground">{call.title}</span>
         <StatusBadge size="sm" variant={statusVariant}>
           {statusText}
         </StatusBadge>
       </button>
       {expanded && call.output ? (
-        <pre className="max-h-40 overflow-auto border-t border-white/10 px-2.5 py-2 text-[10.5px] leading-relaxed text-zinc-400">
+        <pre className="max-h-40 overflow-auto border-t border-white/10 px-2.5 py-2 text-[10.5px] leading-relaxed text-muted-foreground">
           {call.output}
         </pre>
       ) : null}
@@ -745,20 +745,20 @@ function MessageAttachments({
         const processingMode = resolveAttachmentProcessingModeForDisplay(attachment, processingPlans);
         return (
           <span
-            className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/10 px-2 py-1 text-[10px] text-zinc-200 backdrop-blur"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/10 px-2 py-1 text-[10px] text-foreground backdrop-blur"
             key={attachment.id}
           >
             {attachment.kind === "image" ? (
-              <ImageIcon className="h-3 w-3 text-cyan-300" />
+              <ImageIcon className="h-3 w-3 text-primary" />
             ) : (
-              <FileText className="h-3 w-3 text-cyan-300" />
+              <FileText className="h-3 w-3 text-primary" />
             )}
-            <span className="font-medium text-zinc-100">{attachment.name}</span>
-            <span className="text-zinc-500">
+            <span className="font-medium text-foreground">{attachment.name}</span>
+            <span className="text-muted-foreground">
               {formatAttachmentSize(attachment.size)}
             </span>
             {processingMode ? (
-              <span className="rounded-full border border-cyan-300/20 bg-cyan-500/10 px-1.5 py-0.5 text-[9px] text-cyan-100">
+              <span className="rounded-full border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[9px] text-primary">
                 {attachmentProcessingLabel(processingMode)}
               </span>
             ) : null}
@@ -875,13 +875,13 @@ function ApprovalQueueInline({
   const visible = queue.slice(0, 3);
   if (visible.length === 0) return null;
   return (
-    <div className="rounded-2xl border border-amber-400/25 bg-amber-500/10 p-3 shadow-lg shadow-amber-950/20 backdrop-blur-xl">
+    <div className="rounded-2xl border border-warning/25 bg-warning/10 p-3 shadow-lg shadow-warning/20 backdrop-blur-xl">
       <div className="mb-2 flex items-center justify-between text-xs">
-        <span className="flex items-center gap-1.5 font-medium text-amber-300">
+        <span className="flex items-center gap-1.5 font-medium text-warning">
           <ShieldAlert className="h-3.5 w-3.5" />
           승인 대기
         </span>
-        <span className="rounded-full border border-amber-400/20 bg-black/20 px-2 py-0.5 text-[10px] text-amber-200">
+        <span className="rounded-full border border-warning/20 bg-black/20 px-2 py-0.5 text-[10px] text-warning">
           {queue.length}건 대기
         </span>
       </div>
@@ -895,10 +895,10 @@ function ApprovalQueueInline({
               key={item.id}
             >
               <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-medium text-zinc-100">
+                <p className="truncate text-xs font-medium text-foreground">
                   {item.summary}
                 </p>
-                <p className="truncate text-[10px] text-zinc-500">
+                <p className="truncate text-[10px] text-muted-foreground">
                   {approvalPermissionListLabel(item.permissions)}
                   {restoresDraft ? " · 승인 시 입력창 복원" : ""}
                 </p>
@@ -914,7 +914,7 @@ function ApprovalQueueInline({
                 </Button>
                 {onApprovePattern ? (
                   <Button
-                    className="h-7 gap-1 text-xs text-cyan-200"
+                    className="h-7 gap-1 text-xs text-primary"
                     onClick={() => {
                       onApprovePattern(item.summary);
                       onApprove(item.sourceItemId);
@@ -948,13 +948,13 @@ function ApprovalQueueInline({
 function DelegationInline({ items }: { items: DelegationPreviewItem[] }) {
   if (items.length === 0) return null;
   return (
-    <div className="rounded-2xl border border-violet-400/25 bg-violet-500/10 p-3 shadow-lg shadow-violet-950/20 backdrop-blur-xl">
+    <div className="rounded-2xl border border-primary/25 bg-primary/10 p-3 shadow-lg shadow-primary/20 backdrop-blur-xl">
       <div className="mb-2 flex items-center justify-between text-xs">
-        <span className="flex items-center gap-1.5 font-medium text-violet-300">
+        <span className="flex items-center gap-1.5 font-medium text-primary">
           <GitBranch className="h-3.5 w-3.5" />
           위임 추적
         </span>
-        <span className="rounded-full border border-violet-400/20 bg-black/20 px-2 py-0.5 text-[10px] text-violet-200">
+        <span className="rounded-full border border-primary/20 bg-black/20 px-2 py-0.5 text-[10px] text-primary">
           {items.length}건 추적
         </span>
       </div>
@@ -965,7 +965,7 @@ function DelegationInline({ items }: { items: DelegationPreviewItem[] }) {
             key={item.id}
           >
             <div className="flex items-center justify-between gap-2">
-              <span className="truncate text-xs font-medium text-zinc-100">
+              <span className="truncate text-xs font-medium text-foreground">
                 {item.targetLabel ?? item.target}
               </span>
               <StatusBadge
@@ -976,10 +976,10 @@ function DelegationInline({ items }: { items: DelegationPreviewItem[] }) {
                 {delegationStatusLabel(item.status)}
               </StatusBadge>
             </div>
-            <p className="truncate text-[10px] text-zinc-500">
+            <p className="truncate text-[10px] text-muted-foreground">
               {item.sourceAgent} → {item.target}
             </p>
-            <p className="mt-1 line-clamp-2 text-[11px] text-zinc-300">
+            <p className="mt-1 line-clamp-2 text-[11px] text-foreground">
               {item.prompt}
             </p>
           </div>

@@ -86,8 +86,8 @@ export function ChatSidePanelMenu({
         <Button
           aria-label="확장 패널 메뉴"
           className={cn(
-            "relative h-7 gap-1 rounded-lg border border-white/10 bg-white/[0.03] px-2 text-zinc-400 hover:text-zinc-100",
-            mode !== "none" && "border-violet-300/30 text-violet-200",
+            "relative h-7 gap-1 rounded-lg border border-white/10 bg-white/[0.03] px-2 text-muted-foreground hover:text-foreground",
+            mode !== "none" && "border-primary/30 text-primary",
           )}
           size="sm"
           variant="ghost"
@@ -95,7 +95,7 @@ export function ChatSidePanelMenu({
           <PanelRight className="h-3.5 w-3.5" />
           <ChevronDown className="h-3 w-3" />
           {backgroundBadge ? (
-            <span className="absolute -right-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-violet-500 px-0.5 text-[9px] font-bold text-white">
+            <span className="absolute -right-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-0.5 text-[9px] font-bold text-white">
               {backgroundBadge}
             </span>
           ) : null}
@@ -103,7 +103,7 @@ export function ChatSidePanelMenu({
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        className="w-56 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/95 p-1 shadow-2xl backdrop-blur-xl"
+        className="w-56 overflow-hidden rounded-xl border border-border bg-surface/95 p-1 shadow-2xl backdrop-blur-xl"
         sideOffset={6}
       >
         {PANEL_ITEMS.map((item) => {
@@ -113,7 +113,7 @@ export function ChatSidePanelMenu({
             <button
               className={cn(
                 "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] transition-colors",
-                active ? "bg-zinc-800 text-zinc-50" : "text-zinc-300 hover:bg-zinc-800/70 hover:text-zinc-100",
+                active ? "bg-surface text-foreground" : "text-foreground hover:bg-surface/70 hover:text-foreground",
               )}
               key={item.mode}
               onClick={() => {
@@ -122,13 +122,13 @@ export function ChatSidePanelMenu({
               }}
               type="button"
             >
-              <Icon className="h-3.5 w-3.5 text-zinc-500" />
+              <Icon className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="flex-1">{item.label}</span>
               {item.mode === "background" && backgroundBadge ? (
-                <span className="rounded-full bg-violet-500/20 px-1.5 text-[10px] text-violet-200">{backgroundBadge}</span>
+                <span className="rounded-full bg-primary/20 px-1.5 text-[10px] text-primary">{backgroundBadge}</span>
               ) : null}
-              {active ? <span className="text-violet-300">✓</span> : null}
-              {item.shortcut ? <kbd className="text-[10px] text-zinc-600">{item.shortcut}</kbd> : null}
+              {active ? <span className="text-primary">✓</span> : null}
+              {item.shortcut ? <kbd className="text-[10px] text-muted-foreground">{item.shortcut}</kbd> : null}
             </button>
           );
         })}
@@ -200,7 +200,7 @@ export function ChatSidePanel({
         aria-valuenow={widthPx}
         className={cn(
           "group relative w-1.5 shrink-0 cursor-col-resize touch-none rounded-none border-0 bg-transparent p-0 outline-none max-md:hidden",
-          "focus-visible:ring-2 focus-visible:ring-cyan-300/60",
+          "focus-visible:ring-2 focus-visible:ring-primary/60",
         )}
         onKeyDown={(event) => {
           const next = panelWidthAfterKey(widthPx, event.key, event.shiftKey);
@@ -217,23 +217,23 @@ export function ChatSidePanel({
         <span
           className={cn(
             "pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-white/10 transition-all",
-            "group-hover:w-[3px] group-hover:bg-cyan-300/70",
-            dragging && "w-[3px] bg-cyan-300/90",
+            "group-hover:w-[3px] group-hover:bg-primary/70",
+            dragging && "w-[3px] bg-primary/90",
           )}
         />
       </button>
       <aside
         aria-label={`${panelLabel(mode)} 패널`}
-        className="flex max-w-[44vw] shrink-0 flex-col border-l border-white/10 bg-zinc-950/95 backdrop-blur-xl max-md:hidden"
+        className="flex max-w-[44vw] shrink-0 flex-col border-l border-white/10 bg-surface/95 backdrop-blur-xl max-md:hidden"
         ref={asideRef}
         style={{ width: `${widthPx}px` }}
       >
       <header className="flex h-10 shrink-0 items-center gap-2 border-b border-white/10 px-3">
-        <span className="text-[12px] font-semibold text-zinc-200">{panelLabel(mode)}</span>
+        <span className="text-[12px] font-semibold text-foreground">{panelLabel(mode)}</span>
         <span className="flex-1" />
         <button
           aria-label="패널 닫기"
-          className="rounded-md p-1 text-zinc-500 hover:bg-white/5 hover:text-zinc-200"
+          className="rounded-md p-1 text-muted-foreground hover:bg-white/5 hover:text-foreground"
           onClick={onClose}
           type="button"
         >
@@ -256,7 +256,7 @@ export function ChatSidePanelStub({ mode }: { mode: ChatSidePanelMode }) {
   };
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
-      <p className="text-[12.5px] leading-relaxed text-zinc-500">{guide[mode] ?? "준비 중입니다."}</p>
+      <p className="text-[12.5px] leading-relaxed text-muted-foreground">{guide[mode] ?? "준비 중입니다."}</p>
     </div>
   );
 }
@@ -288,7 +288,7 @@ export function ChatSidePanelPreviewContent({
   return (
     <div className="p-2" data-testid="chat-side-panel-preview-iframe-wrap">
       <div
-        className="mb-2 rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] text-zinc-400"
+        className="mb-2 rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] text-muted-foreground"
         data-testid="chat-side-panel-preview-meta"
       >
         마지막 observed preview
@@ -303,16 +303,16 @@ export function ChatSidePanelPreviewContent({
       />
       {capturedClick && annotation ? (
         <div
-          className="mt-2 rounded-md border border-sky-400/25 bg-sky-500/10 p-2 text-xs text-zinc-200"
+          className="mt-2 rounded-md border border-primary/25 bg-primary/10 p-2 text-xs text-foreground"
           data-testid="chat-side-panel-preview-annotation"
         >
-          <div className="font-medium text-sky-100">
+          <div className="font-medium text-primary">
             {formatPreviewViewportClickForPrompt(capturedClick)}
           </div>
-          <div className="mt-1 text-zinc-400">
+          <div className="mt-1 text-muted-foreground">
             x {capturedClick.x}px · y {capturedClick.y}px · viewport {capturedClick.viewportWidth}x{capturedClick.viewportHeight}
           </div>
-          <div className="mt-1 text-amber-300">
+          <div className="mt-1 text-warning">
             DOM selector unknown due to iframe boundary
           </div>
           <Button
