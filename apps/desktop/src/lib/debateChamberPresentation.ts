@@ -48,24 +48,31 @@ export function createAnnexTabCountSummary(counts: Record<AnnexTabKey, number>):
   return active.length > 0 ? `보조자료 ${active.join(" · ")}` : "보조자료 없음";
 }
 
+// Tone maps use the v2 token vocabulary (spec §2.2: main-surface tones → the accent
+// system; §1.1 single-accent = emerald). Each legacy literal hue maps to its semantic
+// token (F2 precedent, U12): agree/decision + orchestrator-family → primary (accent),
+// opposition/reviewer → destructive, risk/skeptic → warning, evidence/neutral/builder →
+// muted (neutral·info). Opacities (/10 fill, /30 border) are preserved from the source
+// so visual weight is unchanged. Cast role differentiation moves to avatars and
+// role-glow (DEB-3, U4) — chrome stays single-accent here.
 const stanceTones: Record<DebateStance, Tone> = {
-  agree: { bg: "bg-violet-500/10", color: "text-violet-300" },
-  decision: { bg: "bg-violet-500/10", color: "text-violet-400" },
-  disagree: { bg: "bg-rose-500/10", color: "text-rose-400" },
-  evidence: { bg: "bg-blue-500/10", color: "text-blue-300" },
-  neutral: { bg: "bg-zinc-500/10", color: "text-zinc-400" },
-  risk: { bg: "bg-amber-500/10", color: "text-amber-400" },
+  agree: { bg: "bg-primary/10", color: "text-primary" },
+  decision: { bg: "bg-primary/10", color: "text-primary" },
+  disagree: { bg: "bg-destructive/10", color: "text-destructive" },
+  evidence: { bg: "bg-muted/10", color: "text-muted-foreground" },
+  neutral: { bg: "bg-muted/10", color: "text-muted-foreground" },
+  risk: { bg: "bg-warning/10", color: "text-warning" },
 };
 
 const roleTones: Partial<Record<AgentProfile["role"], Tone>> = {
-  architect: { bg: "bg-violet-500/10", border: "border-violet-500/30", text: "text-violet-300" },
-  builder: { bg: "bg-blue-500/10", border: "border-blue-500/30", text: "text-blue-300" },
-  executor: { bg: "bg-amber-500/10", border: "border-amber-500/30", text: "text-amber-300" },
-  memory_curator: { bg: "bg-purple-500/10", border: "border-purple-500/30", text: "text-purple-300" },
-  orchestrator: { bg: "bg-violet-500/10", border: "border-violet-500/30", text: "text-violet-300" },
-  reviewer: { bg: "bg-rose-500/10", border: "border-rose-500/30", text: "text-rose-300" },
-  skeptic: { bg: "bg-amber-500/10", border: "border-amber-500/30", text: "text-amber-300" },
-  verifier: { bg: "bg-blue-500/10", border: "border-blue-500/30", text: "text-blue-300" },
+  architect: { bg: "bg-primary/10", border: "border-primary/30", text: "text-primary" },
+  builder: { bg: "bg-muted/10", border: "border-muted/30", text: "text-muted-foreground" },
+  executor: { bg: "bg-warning/10", border: "border-warning/30", text: "text-warning" },
+  memory_curator: { bg: "bg-primary/10", border: "border-primary/30", text: "text-primary" },
+  orchestrator: { bg: "bg-primary/10", border: "border-primary/30", text: "text-primary" },
+  reviewer: { bg: "bg-destructive/10", border: "border-destructive/30", text: "text-destructive" },
+  skeptic: { bg: "bg-warning/10", border: "border-warning/30", text: "text-warning" },
+  verifier: { bg: "bg-muted/10", border: "border-muted/30", text: "text-muted-foreground" },
 };
 
 export function debateStanceTone(stance: DebateStance) {
@@ -73,7 +80,7 @@ export function debateStanceTone(stance: DebateStance) {
 }
 
 export function debateRoleTone(role: AgentProfile["role"]) {
-  return roleTones[role] ?? { bg: "bg-zinc-500/10", border: "border-zinc-500/30", text: "text-zinc-300" };
+  return roleTones[role] ?? { bg: "bg-muted/10", border: "border-muted/30", text: "text-muted-foreground" };
 }
 
 export function formatDebateFooterMeta({
