@@ -59,6 +59,8 @@ export async function runPersonaCodingTask(input: {
   /** optional lorebook/world-info fragment appended to the identity injection */
   worldInfo?: string;
   maxIterations?: number;
+  /** cooperative cancellation — resolves the mission as "cancelled" at the next loop boundary */
+  signal?: AbortSignal;
   now?: () => string;
 }): Promise<PersonaTaskOutcome> {
   const now = input.now ?? (() => new Date().toISOString());
@@ -79,11 +81,13 @@ export async function runPersonaCodingTask(input: {
     agentSet: input.agentSet,
     worldInfo: input.worldInfo,
     maxIterations: input.maxIterations,
+    signal: input.signal,
   });
 
   // Release / fail / retain the pane based on the loop outcome. awaiting_human
   // keeps the session active so the pane stays bound until a human resolves it.
-  if (loopStatus === "completed") {
+  // cancelled releases the pane too — a stopped mission must not leak its pane.
+  if (loopStatus === "completed" || loopStatus === "cancelled") {
     registry = releasePersona(registry, session.id, now());
   } else if (loopStatus === "failed") {
     registry = failPersona(registry, session.id, now());
@@ -109,6 +113,8 @@ export async function runSummonedMission(input: {
   /** optional lorebook/world-info fragment appended to the identity injection */
   worldInfo?: string;
   maxIterations?: number;
+  /** cooperative cancellation — resolves the mission as "cancelled" at the next loop boundary */
+  signal?: AbortSignal;
 }): Promise<LoopStatus> {
   const { session, effects } = input;
   const plan = buildPersonaInjectionPlan({
@@ -119,16 +125,21 @@ export async function runSummonedMission(input: {
     worldInfo: input.worldInfo,
   });
   try {
+    if (input.signal?.aborted) return "cancelled";
     for (let index = 0; index < plan.steps.length; index += 1) {
+      if (input.signal?.aborted) return "cancelled";
       await effects.dispatch(plan.steps[index]!, { stepIndex: -(index + 1) });
     }
   } catch (error) {
+    // A dispatch failing while we are being cancelled is the cancel, not a failure
+    // (e.g. the approval poll waking up on abort) — mirror runClosedLoop's rule.
+    if (input.signal?.aborted) return "cancelled";
     await safeEscalate(effects, `identity injection failed: ${describe(error)}`, session);
     return "failed";
   }
 
   const state = createInitialLoopState(input.packet.verificationPlan);
-  const final = await runClosedLoop({ state, effects, maxIterations: input.maxIterations });
+  const final = await runClosedLoop({ state, effects, maxIterations: input.maxIterations, signal: input.signal });
   return final.status;
 }
 

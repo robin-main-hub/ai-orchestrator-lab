@@ -127,3 +127,39 @@ describe("runAutonomousPersonaTask", () => {
     expect(result).toEqual({ ok: false, reason: "no_free_pane" });
   });
 });
+
+describe("runAutonomousPersonaTask cancellation", () => {
+  it("cancels the run and releases the pane when the signal is already aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const dispatchClient = vi.fn(async () => dispatchResponse("dry_run"));
+    const captureClient = vi.fn(async () =>
+      ({
+        status: "captured",
+        reason: "ok",
+        payload: { outputPreview: "", lineCount: 0 },
+      }) as any,
+    );
+
+    const result = await runAutonomousPersonaTask({
+      registry: createSummonRegistry([{ paneId: "%1", role: "qa" }]),
+      summon: { personaName: "makise", sessionId: "s1", preferredRole: "qa" },
+      persona: persona(),
+      packet: packet(["run tests"]),
+      ctx,
+      mode: "human",
+      clients: { dispatchClient, captureClient },
+      signal: controller.signal,
+      now: () => "2026-06-10T00:00:00.000Z",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.loopStatus).toBe("cancelled");
+    // pane released exactly the way a completed run releases it
+    expect(result.registry.panes.find((p) => p.paneId === "%1")?.status).toBe("free");
+    // cancelled at the first loop boundary — no identity injection / verification dispatch
+    expect(dispatchClient).not.toHaveBeenCalled();
+    expect(captureClient).not.toHaveBeenCalled();
+  });
+});

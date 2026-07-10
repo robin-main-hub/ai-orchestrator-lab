@@ -63,6 +63,7 @@ export const WORK_STATE_EXPRESSION = {
   blocked: "nervousness",
   completed: "pride",
   failed: "sadness",
+  cancelled: "neutral",
   awaiting_human: "nervousness",
   running: "curiosity",
 } as const satisfies Record<string, ExpressionKey>;

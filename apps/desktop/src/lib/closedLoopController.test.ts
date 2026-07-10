@@ -129,3 +129,85 @@ describe("runClosedLoop", () => {
     expect(dispatched).toEqual([]);
   });
 });
+
+describe("runClosedLoop cancellation", () => {
+  function countingEffects(
+    captures: string[],
+    onCapture?: (call: number) => void,
+  ): {
+    effects: ClosedLoopEffects;
+    counts: { dispatch: number; capture: number };
+    dispatched: string[];
+    escalations: string[];
+  } {
+    const counts = { dispatch: 0, capture: 0 };
+    const dispatched: string[] = [];
+    const escalations: string[] = [];
+    const effects: ClosedLoopEffects = {
+      dispatch: (command) => {
+        counts.dispatch += 1;
+        dispatched.push(command);
+      },
+      capture: () => {
+        counts.capture += 1;
+        onCapture?.(counts.capture);
+        return captures[Math.min(counts.capture - 1, captures.length - 1)] ?? "";
+      },
+      escalate: (reason) => {
+        escalations.push(reason);
+      },
+    };
+    return { effects, counts, dispatched, escalations };
+  }
+
+  it("returns cancelled without dispatching or capturing when the signal is already aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const { effects, counts } = countingEffects(["All tests passed"]);
+    const state = createInitialLoopState(["run tests"]);
+
+    const final = await runClosedLoop({ state, effects, signal: controller.signal });
+
+    expect(final.status).toBe("cancelled");
+    expect(counts.dispatch).toBe(0);
+    expect(counts.capture).toBe(0);
+  });
+
+  it("resolves cancelled mid-run and stops dispatching after the abort", async () => {
+    const controller = new AbortController();
+    // Progressing captures keep the loop iterating (await_capture). The 2nd
+    // capture flips the signal, so the loop must stop right after it — before
+    // the no-progress escalation, which needs a 4th capture at the default
+    // threshold (proving the abort, not the fakes, ended the run).
+    const { effects, counts, dispatched, escalations } = countingEffects(
+      ["still working...", "still working...", "still working...", "still working..."],
+      (call) => {
+        if (call === 2) controller.abort();
+      },
+    );
+    const state = createInitialLoopState(["run tests"]);
+
+    const final = await runClosedLoop({ state, effects, signal: controller.signal });
+
+    expect(final.status).toBe("cancelled");
+    expect(counts.capture).toBe(2); // stopped right after the aborting capture
+    expect(counts.dispatch).toBe(1); // only the kickoff dispatch; none after abort
+    expect(dispatched).toEqual(["run tests"]);
+    expect(escalations).toEqual([]);
+  });
+
+  it("without a signal the same fakes still escalate at the iteration cap (regression)", async () => {
+    const { effects, counts, escalations } = countingEffects([
+      "still working...",
+      "still working...",
+      "still working...",
+    ]);
+    const state = createInitialLoopState(["run tests"]);
+
+    const final = await runClosedLoop({ state, effects, maxIterations: 3 });
+
+    expect(final.status).toBe("awaiting_human");
+    expect(counts.capture).toBe(3);
+    expect(escalations.some((reason) => reason.includes("cap"))).toBe(true);
+  });
+});
