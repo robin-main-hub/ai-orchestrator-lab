@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Megaphone, Play, Plus, Trash2 } from "lucide-react";
+import { Megaphone, Play, Plus, Trash2, X } from "lucide-react";
 import { buildLorebookFragment, loadPersona, scanLorebooks, type LoadedPersona } from "@ai-orchestrator/agents";
 import type { TerminalHostKind, TmuxPaneRole } from "@ai-orchestrator/protocol";
 import {
@@ -33,6 +33,14 @@ import {
   type ParallelMissionDraft,
 } from "../lib/parallelMissionBoard";
 import { ParallelMissionBoard } from "./ParallelMissionBoard";
+import {
+  VERIFICATION_PRESETS,
+  addCustom,
+  customCommands,
+  isPresetActive,
+  removeCommand,
+  togglePreset,
+} from "../lib/autonomyVerificationChips";
 
 const MODES: AutonomyMode[] = ["human", "auto_safe"];
 
@@ -75,6 +83,9 @@ export function ParallelMissionContainer({
   });
   const [mode, setMode] = useState<AutonomyMode>("human");
   const [running, setRunning] = useState(false);
+  // transient per-draft custom-command input text (keyed by draft id) — never
+  // part of any draft payload, so the mission field shape stays unchanged.
+  const [pendingCustom, setPendingCustom] = useState<Record<string, string>>({});
   const [board, setBoard] = useState<ParallelBoard>({ cards: [] });
   const [error, setError] = useState<string | null>(null);
   // git worktree isolation (the OSS-orchestrator consensus primitive): when on,
@@ -475,14 +486,72 @@ export function ParallelMissionContainer({
               onChange={(event) => patchDraft(draft.id, { goal: event.target.value })}
               disabled={running}
             />
-            <textarea
-              className="parallel-draft__steps"
-              placeholder="검증 단계 (줄바꿈으로 구분)&#10;예: pnpm test&#10;pnpm build"
-              value={draft.verificationStepsText}
-              onChange={(event) => patchDraft(draft.id, { verificationStepsText: event.target.value })}
-              disabled={running}
-              rows={2}
-            />
+            <div className="autonomy-verify-field">
+              <span className="autonomy-verify-hint">실행할 검사를 켜세요</span>
+              <div className="verify-chip-row" role="group" aria-label="검증 프리셋">
+                {VERIFICATION_PRESETS.map((preset) => {
+                  const active = isPresetActive(draft.verificationStepsText, preset.id);
+                  return (
+                    <button
+                      key={preset.id}
+                      className={`verify-chip${active ? " is-on" : ""}`}
+                      type="button"
+                      aria-pressed={active}
+                      disabled={running}
+                      onClick={() =>
+                        patchDraft(draft.id, {
+                          verificationStepsText: togglePreset(draft.verificationStepsText, preset.id),
+                        })
+                      }
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {customCommands(draft.verificationStepsText).length > 0 ? (
+                <div className="verify-chip-row verify-custom-row">
+                  {customCommands(draft.verificationStepsText).map((command) => (
+                    <span key={command} className="verify-chip verify-custom is-on">
+                      <span className="verify-custom-label">{command}</span>
+                      <button
+                        className="verify-chip-remove"
+                        type="button"
+                        aria-label={`${command} 제거`}
+                        disabled={running}
+                        onClick={() =>
+                          patchDraft(draft.id, {
+                            verificationStepsText: removeCommand(draft.verificationStepsText, command),
+                          })
+                        }
+                      >
+                        <X size={11} aria-hidden="true" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              <input
+                className="verify-custom-input"
+                disabled={running}
+                value={pendingCustom[draft.id] ?? ""}
+                onChange={(event) =>
+                  setPendingCustom((prev) => ({ ...prev, [draft.id]: event.target.value }))
+                }
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter") return;
+                  event.preventDefault();
+                  const value = (pendingCustom[draft.id] ?? "").trim();
+                  if (!value) return;
+                  patchDraft(draft.id, {
+                    verificationStepsText: addCustom(draft.verificationStepsText, value),
+                  });
+                  setPendingCustom((prev) => ({ ...prev, [draft.id]: "" }));
+                }}
+                placeholder="+ 직접 입력"
+                type="text"
+              />
+            </div>
           </div>
         ))}
         <datalist id="parallel-persona-options">
