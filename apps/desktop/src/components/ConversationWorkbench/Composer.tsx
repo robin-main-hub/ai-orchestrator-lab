@@ -294,11 +294,11 @@ export function Composer({
                 <p className="px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-zinc-500">도구</p>
                 {onStartSwarmSearch ? (
                   <button
-                    className="flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left transition-colors hover:bg-violet-500/10"
+                    className="flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left transition-colors hover:bg-primary/10"
                     onClick={() => onStartSwarmSearch(draftMessage)}
                     type="button"
                   >
-                    <FlaskConical className="mt-0.5 h-4 w-4 shrink-0 text-violet-300" />
+                    <FlaskConical className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                     <span className="min-w-0">
                       <span className="block text-[13px] font-medium">스웜 서치</span>
                       <span className="block text-[11px] leading-snug text-zinc-500">

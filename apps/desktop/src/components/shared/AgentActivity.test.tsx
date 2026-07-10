@@ -37,7 +37,7 @@ describe("AgentActivity", () => {
     const html = renderToStaticMarkup(<AgentStatePill state="waiting_approval" />);
 
     expect(html).toContain("승인 대기");
-    expect(html).toContain("text-amber-300");
+    expect(html).toContain("text-warning");
   });
 
   it("uses motion indicators for thinking and responding portraits", () => {

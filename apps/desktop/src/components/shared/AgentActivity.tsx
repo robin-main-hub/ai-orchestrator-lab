@@ -26,57 +26,57 @@ type StateStyle = {
 
 export const agentStateConfig: Record<AgentState, StateStyle> = {
   idle: {
-    ring: "ring-1 ring-zinc-700/60",
-    dot: "bg-zinc-500",
+    ring: "ring-1 ring-border",
+    dot: "bg-muted-foreground",
     label: "대기",
-    labelColor: "text-zinc-400",
+    labelColor: "text-muted-foreground",
   },
   thinking: {
-    ring: "ring-1 ring-violet-500/40",
-    dot: "bg-violet-400",
+    ring: "ring-1 ring-primary/40",
+    dot: "bg-primary",
     label: "사고 중",
-    labelColor: "text-violet-300",
+    labelColor: "text-primary",
   },
   responding: {
-    ring: "ring-1 ring-violet-500/50",
+    ring: "ring-1 ring-primary/50",
     glow: "os-glow-running",
-    dot: "bg-violet-400",
+    dot: "bg-primary",
     label: "응답 중",
-    labelColor: "text-violet-300",
+    labelColor: "text-primary",
   },
   working: {
-    ring: "ring-1 ring-emerald-500/50",
+    ring: "ring-1 ring-primary/50",
     glow: "os-glow-working os-breathe",
-    dot: "bg-emerald-400",
+    dot: "bg-primary",
     label: "작업 중",
-    labelColor: "text-emerald-300",
+    labelColor: "text-primary",
   },
   waiting_approval: {
-    ring: "ring-1 ring-amber-500/50",
+    ring: "ring-1 ring-warning/50",
     glow: "os-glow-waiting",
-    dot: "bg-amber-400",
+    dot: "bg-warning",
     label: "승인 대기",
-    labelColor: "text-amber-300",
+    labelColor: "text-warning",
   },
   blocked: {
-    ring: "ring-1 ring-rose-500/50",
+    ring: "ring-1 ring-destructive/50",
     glow: "os-glow-blocked",
-    dot: "bg-rose-400",
+    dot: "bg-destructive",
     label: "차단됨",
-    labelColor: "text-rose-300",
+    labelColor: "text-destructive",
   },
   error: {
-    ring: "ring-1 ring-rose-500/60",
+    ring: "ring-1 ring-destructive/60",
     glow: "os-glow-blocked",
-    dot: "bg-rose-400",
+    dot: "bg-destructive",
     label: "오류",
-    labelColor: "text-rose-300",
+    labelColor: "text-destructive",
   },
   success: {
-    ring: "ring-1 ring-cyan-500/50",
-    dot: "bg-cyan-400",
+    ring: "ring-1 ring-primary/50",
+    dot: "bg-primary",
     label: "완료",
-    labelColor: "text-cyan-300",
+    labelColor: "text-primary",
   },
 };
 
@@ -90,7 +90,7 @@ export function AgentPortrait({
   initials,
   state,
   size = "md",
-  tintClassName = "bg-zinc-800 text-zinc-200",
+  tintClassName = "bg-muted text-foreground",
   className,
   avatarUrl,
 }: {
@@ -119,9 +119,9 @@ export function AgentPortrait({
         {state === "thinking" || state === "responding" ? (
           <Loader2 className={cn(s.icon, "animate-spin", cfg.labelColor)} />
         ) : state === "error" ? (
-          <AlertTriangle className={cn(s.icon, "text-rose-400")} />
+          <AlertTriangle className={cn(s.icon, "text-destructive")} />
         ) : state === "success" ? (
-          <Check className={cn(s.icon, "text-cyan-400")} />
+          <Check className={cn(s.icon, "text-primary")} />
         ) : avatarUrl ? (
           <img alt="" className="h-full w-full rounded-[inherit] object-cover" src={avatarUrl} />
         ) : (
@@ -130,7 +130,7 @@ export function AgentPortrait({
       </div>
       <span
         className={cn(
-          "absolute -bottom-0.5 -right-0.5 rounded-full border-2 border-zinc-950",
+          "absolute -bottom-0.5 -right-0.5 rounded-full border-2 border-background",
           s.dot,
           cfg.dot,
           (state === "working" || state === "waiting_approval") && "os-breathe",
@@ -146,7 +146,7 @@ export function AgentStatePill({ state, className }: { state: AgentState; classN
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full bg-zinc-900/60 px-2 py-0.5 text-[10px] font-medium",
+        "inline-flex items-center gap-1.5 rounded-full bg-muted/60 px-2 py-0.5 text-[10px] font-medium",
         cfg.labelColor,
         className,
       )}
@@ -160,9 +160,9 @@ export function AgentStatePill({ state, className }: { state: AgentState; classN
 export function ThinkingDots({ className }: { className?: string }) {
   return (
     <span className={cn("inline-flex items-center gap-1", className)}>
-      <span className="os-thinking-dot h-1.5 w-1.5 rounded-full bg-zinc-500" style={{ animationDelay: "0ms" }} />
-      <span className="os-thinking-dot h-1.5 w-1.5 rounded-full bg-zinc-500" style={{ animationDelay: "200ms" }} />
-      <span className="os-thinking-dot h-1.5 w-1.5 rounded-full bg-zinc-500" style={{ animationDelay: "400ms" }} />
+      <span className="os-thinking-dot h-1.5 w-1.5 rounded-full bg-muted-foreground" style={{ animationDelay: "0ms" }} />
+      <span className="os-thinking-dot h-1.5 w-1.5 rounded-full bg-muted-foreground" style={{ animationDelay: "200ms" }} />
+      <span className="os-thinking-dot h-1.5 w-1.5 rounded-full bg-muted-foreground" style={{ animationDelay: "400ms" }} />
     </span>
   );
 }

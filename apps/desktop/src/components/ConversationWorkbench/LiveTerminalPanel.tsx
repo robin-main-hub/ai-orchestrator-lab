@@ -180,7 +180,7 @@ export function LiveTerminalPanel({
       </div>
 
       <pre
-        className="min-h-0 flex-1 overflow-auto bg-[#07070a] p-3 font-mono text-[11px] leading-relaxed text-zinc-200"
+        className="min-h-0 flex-1 overflow-auto bg-[var(--bg)] p-3 font-mono text-[11px] leading-relaxed text-foreground"
         ref={scrollRef}
       >
         {state.status === "error"
