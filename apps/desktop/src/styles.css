@@ -1143,299 +1143,9 @@ button {
 .project-rail-panel,
 .channel-rail-panel,
 .backup-rail-panel,
-.config-library-panel {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.config-library-panel {
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
-  gap: 8px;
-}
-
-.config-library-workbench {
-  grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
-  height: 100%;
-  overflow: hidden;
-}
-
-.config-kind-tabs {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 5px;
-}
-
-.config-kind-tabs button {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 5px;
-  min-height: 30px;
-  padding: 0 7px;
-  border: 1px solid var(--line-soft);
-  border-radius: 7px;
-  background: var(--card);
-  color: var(--muted);
-  cursor: pointer;
-  text-align: left;
-}
-
-.config-kind-tabs button.active {
-  border-color: var(--cyan);
-  background: var(--surface-elevated);
-  color: var(--text);
-}
-
-.config-kind-tabs span,
-.config-kind-tabs strong {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.config-kind-tabs span {
-  font-size: 9.5px;
-}
-
-.config-kind-tabs strong {
-  color: var(--cyan);
-  font-size: 10px;
-}
-
-.config-library-body {
-  display: grid;
-  grid-template-rows: minmax(88px, 0.42fr) minmax(0, 1fr);
-  gap: 8px;
-  min-height: 0;
-}
-
-.config-library-workbench .config-library-body {
-  grid-template-columns: minmax(250px, 0.4fr) minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr);
-}
-
-.config-file-list {
-  display: grid;
-  align-content: start;
-  gap: 5px;
-  min-height: 0;
-  overflow-y: auto;
-  padding-right: 3px;
-}
-
-.config-file-list button {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-  padding: 7px;
-  border: 1px solid var(--line-soft);
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.4);
-  color: inherit;
-  cursor: pointer;
-  text-align: left;
-}
-
-.config-file-list button.active {
-  border-color: var(--cyan);
-  background: var(--card);
-}
-
-.config-file-list strong,
-.config-file-list span,
-.config-file-list em {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.config-file-list strong {
-  color: var(--text);
-  font-size: 11px;
-}
-
-.config-file-list span,
-.config-file-list em {
-  color: var(--subtle);
-  font-size: 9px;
-  font-style: normal;
-}
-
-.config-file-editor {
-  display: grid;
-  gap: 6px;
-  min-height: 0;
-  overflow-y: auto;
-  padding-right: 3px;
-}
-
-.config-editor-toolbar,
-.config-section-title,
-.config-rule-strip span,
-.config-save-note {
-  display: flex;
-  align-items: center;
-}
-
-.config-editor-toolbar {
-  gap: 6px;
-}
-
-.config-editor-toolbar span {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--cyan);
-  font-size: 10px;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.config-file-toolbar-label {
-  cursor: pointer;
-}
-
-.config-file-toolbar-label input {
-  display: none;
-}
-
-.config-file-editor label {
-  display: grid;
-  gap: 4px;
-}
-
-.config-file-editor label span {
-  color: var(--subtle);
-  font-size: 9.5px;
-}
-
-.config-file-editor input,
-.config-file-editor select,
-.config-file-editor textarea {
-  width: 100%;
-  min-width: 0;
-  border: 1px solid var(--line-soft);
-  border-radius: 7px;
-  background: var(--card);
-  color: var(--text);
-}
-
-.config-file-editor input,
-.config-file-editor select {
-  min-height: 28px;
-  padding: 0 7px;
-}
-
-.config-file-editor textarea {
-  min-height: 132px;
-  resize: vertical;
-  padding: 8px;
-  font-size: 10.5px;
-  line-height: 1.45;
-}
-
-.config-library-workbench .config-file-editor textarea {
-  min-height: 300px;
-}
-
-.config-editor-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 74px;
-  gap: 6px;
-}
-
-.config-save-note {
-  gap: 6px;
-  padding: 7px;
-  border: 1px solid #6b4e24;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.4);
-  color: var(--amber);
-  font-size: 9.5px;
-  line-height: 1.35;
-}
-
-.config-profile-pack-list {
-  display: grid;
-  gap: 5px;
-  min-height: 0;
-}
-
-.config-library-workbench .config-profile-pack-list {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.config-library-workbench .config-section-title {
-  grid-column: 1 / -1;
-}
-
-.config-section-title {
-  gap: 6px;
-  color: var(--cyan);
-  font-size: 11px;
-}
-
-.config-profile-pack-list article {
-  display: grid;
-  gap: 3px;
-  padding: 7px;
-  border: 1px solid var(--line-soft);
-  border-radius: 8px;
-  background: var(--card);
-}
-
-.config-profile-pack-list strong,
-.config-profile-pack-list span,
-.config-profile-pack-list p,
-.config-profile-pack-list em {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.config-profile-pack-list strong,
-.config-profile-pack-list span,
-.config-profile-pack-list em {
-  white-space: nowrap;
-}
-
-.config-profile-pack-list strong {
-  color: var(--text);
-  font-size: 10.5px;
-}
-
-.config-profile-pack-list span,
-.config-profile-pack-list em,
-.config-profile-pack-list p {
-  color: var(--subtle);
-  font-size: 9px;
-  font-style: normal;
-}
-
-.config-profile-pack-list p {
-  margin: 0;
-}
-
-.config-rule-strip {
-  display: grid;
-  gap: 5px;
-}
-
-.config-rule-strip span {
-  gap: 6px;
-  min-height: 26px;
-  padding: 0 7px;
-  border: 1px solid var(--line-soft);
-  border-radius: 8px;
-  background: var(--bg);
-  color: var(--muted);
-  font-size: 9.5px;
-}
+/* config_files: legacy panel CSS removed — the ConfigLibraryPanel component
+ * now emits the .config-v2 grammar. Its styles live in the append-only
+ * config_files v2 block at the end of this file. */
 
 .rail-hero-card {
   display: grid;
@@ -11253,4 +10963,440 @@ body:has(.app-shell.annex-focus-shell) {
 }
 @keyframes rmas-spin {
   to { transform: rotate(360deg); }
+}
+
+/* === config_files v2 === */
+/* CFG-B: 미니멀 2패널 설정파일 라이브러리(§0-B). 터미널 독/우측 로스터/장황한
+ * 규칙 문구를 걷어내고 라벨·본문 중심 에디터 + 파일별 착용 캐릭터(PersonaChip)만
+ * 남긴다. emerald 단일 액센트, radius 12, mono 숫자. 파일 말미 append-only 격리. */
+
+/* 설정파일 뷰는 우측 에이전트 로스터를 제거 → 셸을 2열(좌 60px 아이콘 레일)로 좁히고,
+ * 터미널 독 제거로 비게 될 하단 행을 0으로 접는다(좌 레일 span 1/4 유지). */
+.app-shell.compact-rail-shell {
+  grid-template-columns: 60px minmax(0, 1fr);
+  grid-template-rows: 56px minmax(0, 1fr) 0;
+}
+
+/* board-toolbar 제거로 config 센터보드는 단일 콘텐츠 행. */
+.center-board.config-center-board {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.config-v2 {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "header header"
+    "list editor"
+    "feed feed";
+  gap: 12px;
+  width: 100%;
+  max-width: 1280px;
+  height: 100%;
+  min-height: 0;
+  margin-inline: auto;
+  color: var(--fg);
+}
+
+/* ── 헤더 밴드 ── */
+.config-v2__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.config-v2__heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent);
+}
+
+.config-v2__heading > div {
+  display: grid;
+  gap: 1px;
+}
+
+.config-v2__heading strong {
+  color: var(--fg);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.config-v2__heading span {
+  color: var(--fg-muted);
+  font-size: 12px;
+}
+
+.config-v2__kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.config-v2__kinds button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.config-v2__kinds button:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.config-v2__kinds button.active {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--fg);
+}
+
+.config-v2__kinds button span {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.config-v2__kinds button strong {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.config-v2__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.config-v2__status-badge {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  color: var(--fg-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: help;
+}
+
+.config-v2__new-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--accent);
+  color: #052e16;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ── 좌: 파일 목록 ── */
+.config-v2__list {
+  grid-area: list;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 3px;
+}
+
+.config-v2__list button {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.config-v2__list button:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.config-v2__list button.active {
+  border-color: var(--accent);
+  border-left-width: 2px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+}
+
+.config-v2__list-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.config-v2__list-top strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fg);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-v2__list-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--fg-muted);
+  font-size: 11px;
+}
+
+.config-v2__unworn {
+  color: var(--fg-muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+/* ── 우: 에디터(라벨·본문 중심) ── */
+.config-v2__editor {
+  grid-area: editor;
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 3px;
+}
+
+.config-v2__editor--empty {
+  place-items: center;
+  color: var(--fg-muted);
+  font-size: 12px;
+}
+
+.config-v2__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.config-v2__toolbar-kind {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.config-v2__toolbar-spacer {
+  flex: 1;
+}
+
+.config-v2__icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.config-v2__icon-button:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--fg);
+}
+
+.config-v2__upload input {
+  display: none;
+}
+
+.config-v2__wearers {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+}
+
+.config-v2__wearers-label {
+  color: var(--fg-muted);
+  font-size: 11px;
+}
+
+.config-v2__field {
+  display: grid;
+  gap: 5px;
+}
+
+.config-v2__field > span {
+  color: var(--fg-muted);
+  font-size: 11px;
+}
+
+.config-v2__field input,
+.config-v2__field select,
+.config-v2__field textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 12px;
+}
+
+.config-v2__field input,
+.config-v2__field select {
+  min-height: 32px;
+  padding: 0 10px;
+}
+
+.config-v2__field--label input {
+  font-size: 13px;
+}
+
+.config-v2__field--body {
+  min-height: 0;
+}
+
+.config-v2__field--body textarea {
+  min-height: 320px;
+  height: 100%;
+  resize: vertical;
+  padding: 12px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.config-v2__meta > summary {
+  color: var(--fg-muted);
+  font-size: 11px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.config-v2__meta > summary::-webkit-details-marker {
+  display: none;
+}
+
+.config-v2__meta[open] > summary {
+  margin-bottom: 8px;
+}
+
+.config-v2__meta-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.config-v2__field--path,
+.config-v2__field--tags {
+  grid-column: 1 / -1;
+}
+
+/* ── 하단: 프로필 팩(장비 세트) 카드 ── */
+.config-v2__feed {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.config-v2__section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.config-v2__packs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+}
+
+.config-v2__pack {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  min-width: 0;
+}
+
+.config-v2__pack strong {
+  color: var(--fg);
+  font-size: 12px;
+}
+
+.config-v2__pack span {
+  color: var(--fg-muted);
+  font-size: 11px;
+}
+
+.config-v2__pack p {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.config-v2__pack em {
+  color: var(--fg-muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+/* ── 반응형(U7 4단) ── */
+@media (max-width: 1024px) {
+  .config-v2 {
+    grid-template-columns: 280px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .config-v2 {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "header"
+      "list"
+      "editor"
+      "feed";
+  }
+  .config-v2__meta-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* 모션은 reduced-motion 이 아닐 때만 — 정지가 기본값(§1.1). */
+@media (prefers-reduced-motion: no-preference) {
+  .config-v2__kinds button,
+  .config-v2__list button,
+  .config-v2__icon-button,
+  .config-v2__new-button {
+    transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+  }
 }

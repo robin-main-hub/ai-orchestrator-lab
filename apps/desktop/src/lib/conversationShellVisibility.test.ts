@@ -58,7 +58,9 @@ describe("getConversationShellVisibility", () => {
     expect(cockpitResult).toEqual(expected);
   });
 
-  it("keeps config library focused on the library surface", () => {
+  it("keeps config library focused on the minimal library surface", () => {
+    // config_files v2 (§0-B): terminal dock + board toolbar are removed; only
+    // the left icon rail remains so the settings-file view stays minimal.
     expect(
       getConversationShellVisibility({
         configLibraryActive: true,
@@ -68,8 +70,8 @@ describe("getConversationShellVisibility", () => {
       showCodingPacketPanel: false,
       showEvolveMementoPanel: false,
       showLeftRail: true,
-      showTerminalDock: true,
-      showToolbarActions: true,
+      showTerminalDock: false,
+      showToolbarActions: false,
       showWorkItemHandoffPanel: false,
     });
   });

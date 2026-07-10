@@ -1,7 +1,14 @@
-import { CheckCircle2, CopyPlus, Download, FileText, Package, Plus, Save, Tags, Upload } from "lucide-react";
+import { CopyPlus, Download, FileText, Package, Plus, Save, Upload } from "lucide-react";
+import { PersonaAvatarStack } from "@/components/persona/PersonaChip";
 import { agentRoleLabel } from "../lib/helpers";
 import { platformDownload } from "../lib/platform";
-import type { AgentConfigFile, AgentConfigFileKind, AgentProfilePack } from "../types";
+import type {
+  AgentConfigFile,
+  AgentConfigFileKind,
+  AgentProfilePack,
+  AgentVisualSettings,
+  WorkbenchAgent,
+} from "../types";
 
 const configKinds: AgentConfigFileKind[] = ["soul", "agents", "skill", "memory_policy", "prompt_template"];
 
@@ -43,7 +50,24 @@ function downloadConfigFile(file: AgentConfigFile) {
   });
 }
 
+/**
+ * 파일을 "입고 있는" 캐릭터들 — linkedAgentIds → agents 로 해석해 PersonaChip
+ * 프리미티브가 쓰는 member 형태로 반환한다. 신원 없는 id(삭제된 에이전트 등)는
+ * 조용히 제외해 가짜 배정을 만들지 않는다(§1.2 rule 4).
+ */
+function linkedMembers(file: AgentConfigFile, agents: WorkbenchAgent[]) {
+  return file.linkedAgentIds
+    .map((id) => agents.find((agent) => agent.id === id))
+    .filter((agent): agent is WorkbenchAgent => Boolean(agent))
+    .map((agent) => ({ personaName: agent.personaName, role: agent.role, name: agent.name }));
+}
+
 export function ConfigLibraryPanel({
+  agents = [],
+  // agentVisualsById is accepted (wired from App) so PR② (CFG-C persona edit
+  // row) can render user-uploaded avatars without re-touching App.tsx. PR①
+  // resolves character portraits via role slug (all linked roles ship art),
+  // so the stack shows real art without needing the uploaded-visual fallback.
   configFiles,
   onCreateConfigFile,
   onDuplicateConfigFile,
@@ -52,9 +76,11 @@ export function ConfigLibraryPanel({
   onSelectConfigFile,
   onUpdateConfigFile,
   profilePacks,
-  variant = "rail",
+  variant = "workbench",
   selectedConfigFileId,
 }: {
+  agents?: WorkbenchAgent[];
+  agentVisualsById?: Record<string, AgentVisualSettings>;
   configFiles: AgentConfigFile[];
   onCreateConfigFile: (kind: AgentConfigFileKind) => void;
   onDuplicateConfigFile: (configFileId: string) => void;
@@ -69,149 +95,179 @@ export function ConfigLibraryPanel({
   const selectedConfigFile = configFiles.find((file) => file.id === selectedConfigFileId) ?? configFiles[0];
   const selectedKind = selectedConfigFile?.kind ?? "soul";
   const visibleFiles = configFiles.filter((file) => file.kind === selectedKind);
+  const selectedMembers = selectedConfigFile ? linkedMembers(selectedConfigFile, agents) : [];
+  const STATUS_TOOLTIP =
+    "이 항목은 앱 내장 라이브러리입니다. 위 경로는 논리적 표시이며 디스크의 실제 파일을 읽거나 쓰지 않습니다. 저장은 이벤트 기록만 남기고 파일에 반영되지 않습니다(새로고침 시 초기값으로 복원). 실제 파일은 불러오기/다운로드로 로컬 Markdown과 주고받습니다.";
 
   return (
-    <section
-      className={`mini-panel config-library-panel ${variant === "rail" ? "rail-panel" : "config-library-workbench"}`}
-      aria-label="에이전트 설정파일 라이브러리"
-    >
-      <header>
-        <FileText size={16} />
-        <span>설정파일</span>
-        <button
-          className="rail-icon-button"
-          onClick={() => onCreateConfigFile(selectedKind)}
-          title="현재 종류로 새 설정파일 만들기"
-          type="button"
-        >
-          <Plus size={13} />
-        </button>
+    <section className={`config-v2 config-v2--${variant}`} aria-label="에이전트 설정파일 라이브러리">
+      <header className="config-v2__header" style={{ gridArea: "header" }}>
+        <div className="config-v2__heading">
+          <FileText size={16} />
+          <div>
+            <strong>설정파일</strong>
+            <span>에이전트 지침 라이브러리</span>
+          </div>
+        </div>
+
+        <div className="config-v2__kinds" role="tablist" aria-label="설정파일 종류">
+          {configKinds.map((kind) => {
+            const isActive = kind === selectedKind;
+            const count = configFiles.filter((file) => file.kind === kind).length;
+            return (
+              <button
+                aria-selected={isActive}
+                className={isActive ? "active" : ""}
+                key={kind}
+                onClick={() => {
+                  const firstOfKind = configFiles.find((file) => file.kind === kind);
+                  if (firstOfKind) {
+                    onSelectConfigFile(firstOfKind.id);
+                    return;
+                  }
+                  onCreateConfigFile(kind);
+                }}
+                role="tab"
+                type="button"
+              >
+                <span>{kindLabels[kind]}</span>
+                <strong>{count}</strong>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="config-v2__header-actions">
+          <span className="config-v2__status-badge" title={STATUS_TOOLTIP}>
+            앱 내장 · 디스크 미반영
+          </span>
+          <button
+            className="config-v2__new-button"
+            onClick={() => onCreateConfigFile(selectedKind)}
+            title="현재 종류로 새 설정파일 만들기"
+            type="button"
+          >
+            <Plus size={14} />
+            새로 만들기
+          </button>
+        </div>
       </header>
 
-      <div className="config-kind-tabs" role="tablist" aria-label="설정파일 종류">
-        {configKinds.map((kind) => {
-          const isActive = kind === selectedKind;
-          const count = configFiles.filter((file) => file.kind === kind).length;
+      <div className="config-v2__list" aria-label="설정파일 목록" style={{ gridArea: "list" }}>
+        {visibleFiles.map((file) => {
+          const members = linkedMembers(file, agents);
           return (
-            <button
-              aria-selected={isActive}
-              className={isActive ? "active" : ""}
-              key={kind}
-              onClick={() => {
-                const firstOfKind = configFiles.find((file) => file.kind === kind);
-                if (firstOfKind) {
-                  onSelectConfigFile(firstOfKind.id);
-                  return;
-                }
-                onCreateConfigFile(kind);
-              }}
-              role="tab"
-              type="button"
-            >
-              <span>{kindLabels[kind]}</span>
-              <strong>{count}</strong>
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="config-library-body">
-        <div className="config-file-list" aria-label="설정파일 목록">
-          {visibleFiles.map((file) => (
             <button
               className={file.id === selectedConfigFile?.id ? "active" : ""}
               key={file.id}
               onClick={() => onSelectConfigFile(file.id)}
               type="button"
             >
-              <strong>{file.label}</strong>
-              <span>{scopeLabel(file.scope)} / v{file.version} / {file.path}</span>
-              <em>{file.tags.join(" · ") || "no tag"}</em>
-            </button>
-          ))}
-        </div>
-
-        {selectedConfigFile ? (
-          <div className="config-file-editor">
-            <div className="config-editor-toolbar">
-              <span>{kindLabels[selectedConfigFile.kind]}</span>
-              {/* 정직성: 이 패널은 앱 내장 라이브러리 — 위 경로는 논리적 표시일 뿐 디스크의 실제
-                  파일을 읽거나 쓰지 않는다. 시드/예시를 실제 파일처럼 보이지 않게 명시. */}
-              <span
-                title="이 항목은 앱 내장 라이브러리입니다. 위 경로는 논리적 표시이며 디스크의 실제 파일을 읽거나 쓰지 않습니다. 저장은 이벤트 기록만 남깁니다(파일 미반영)."
-                style={{
-                  fontSize: "10px",
-                  color: "#fbbf24",
-                  border: "1px solid currentColor",
-                  borderRadius: "999px",
-                  padding: "1px 7px",
-                  opacity: 0.9,
-                }}
-              >
-                앱 내장 · 디스크 미반영
+              <span className="config-v2__list-top">
+                <strong>{file.label}</strong>
+                {members.length > 0 ? (
+                  <PersonaAvatarStack members={members} size={20} max={4} />
+                ) : (
+                  <em className="config-v2__unworn">미착용</em>
+                )}
               </span>
-              <button
-                className="rail-icon-button"
-                onClick={() => onDuplicateConfigFile(selectedConfigFile.id)}
-                title="복제"
-                type="button"
-              >
-                <CopyPlus size={13} />
-              </button>
-              <button
-                className="rail-icon-button"
-                onClick={() => onSaveConfigFile(selectedConfigFile.id)}
-                title="저장"
-                type="button"
-              >
-                <Save size={13} />
-              </button>
-              <label className="rail-icon-button config-file-toolbar-label" title="Markdown 파일 불러오기">
-                <Upload size={13} />
-                <input
-                  accept=".md,.markdown,.txt,text/markdown,text/plain"
-                  onChange={(event) => {
-                    const file = event.currentTarget.files?.[0];
-                    if (!file) {
-                      return;
+              <span className="config-v2__list-meta">
+                {scopeLabel(file.scope)} · <span className="aol-mono">v{file.version}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {selectedConfigFile ? (
+        <div className="config-v2__editor" style={{ gridArea: "editor" }}>
+          <div className="config-v2__toolbar">
+            <span className="config-v2__toolbar-kind">{kindLabels[selectedConfigFile.kind]}</span>
+            <div className="config-v2__toolbar-spacer" />
+            <button
+              className="config-v2__icon-button"
+              onClick={() => onDuplicateConfigFile(selectedConfigFile.id)}
+              title="복제"
+              type="button"
+            >
+              <CopyPlus size={14} />
+            </button>
+            <button
+              className="config-v2__icon-button"
+              onClick={() => onSaveConfigFile(selectedConfigFile.id)}
+              title="체크포인트 기록"
+              type="button"
+            >
+              <Save size={14} />
+            </button>
+            <label className="config-v2__icon-button config-v2__upload" title="Markdown 파일 불러오기">
+              <Upload size={14} />
+              <input
+                accept=".md,.markdown,.txt,text/markdown,text/plain"
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0];
+                  if (!file) {
+                    return;
+                  }
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    if (typeof reader.result === "string") {
+                      onImportConfigFile(selectedConfigFile.id, file.name, reader.result);
                     }
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                      if (typeof reader.result === "string") {
-                        onImportConfigFile(selectedConfigFile.id, file.name, reader.result);
-                      }
-                    };
-                    reader.readAsText(file);
-                    event.currentTarget.value = "";
-                  }}
-                  type="file"
+                  };
+                  reader.readAsText(file);
+                  event.currentTarget.value = "";
+                }}
+                type="file"
+              />
+            </label>
+            <button
+              className="config-v2__icon-button"
+              onClick={() => downloadConfigFile(selectedConfigFile)}
+              title="Markdown 파일 다운로드"
+              type="button"
+            >
+              <Download size={14} />
+            </button>
+          </div>
+
+          <div className="config-v2__wearers">
+            <span className="config-v2__wearers-label">착용 에이전트</span>
+            {selectedMembers.length > 0 ? (
+              <PersonaAvatarStack members={selectedMembers} size={24} max={4} />
+            ) : (
+              <em className="config-v2__unworn">미착용</em>
+            )}
+          </div>
+
+          <label className="config-v2__field config-v2__field--label">
+            <span>라벨</span>
+            <input
+              value={selectedConfigFile.label}
+              onChange={(event) => onUpdateConfigFile(selectedConfigFile.id, { label: event.target.value })}
+            />
+          </label>
+
+          <label className="config-v2__field config-v2__field--body">
+            <span>본문</span>
+            <textarea
+              value={selectedConfigFile.body}
+              onChange={(event) => onUpdateConfigFile(selectedConfigFile.id, { body: event.target.value })}
+            />
+          </label>
+
+          <details className="config-v2__meta">
+            <summary>경로 · 범위 · 버전 · 태그</summary>
+            <div className="config-v2__meta-grid">
+              <label className="config-v2__field config-v2__field--path">
+                <span>논리 경로</span>
+                <input
+                  className="aol-mono"
+                  value={selectedConfigFile.path}
+                  onChange={(event) => onUpdateConfigFile(selectedConfigFile.id, { path: event.target.value })}
                 />
               </label>
-              <button
-                className="rail-icon-button"
-                onClick={() => downloadConfigFile(selectedConfigFile)}
-                title="Markdown 파일 다운로드"
-                type="button"
-              >
-                <Download size={13} />
-              </button>
-            </div>
-            <label>
-              <span>라벨</span>
-              <input
-                value={selectedConfigFile.label}
-                onChange={(event) => onUpdateConfigFile(selectedConfigFile.id, { label: event.target.value })}
-              />
-            </label>
-            <label>
-              <span>경로</span>
-              <input
-                value={selectedConfigFile.path}
-                onChange={(event) => onUpdateConfigFile(selectedConfigFile.id, { path: event.target.value })}
-              />
-            </label>
-            <div className="config-editor-grid">
-              <label>
+              <label className="config-v2__field">
                 <span>범위</span>
                 <select
                   value={selectedConfigFile.scope}
@@ -224,9 +280,10 @@ export function ConfigLibraryPanel({
                   <option value="global">전역</option>
                 </select>
               </label>
-              <label>
+              <label className="config-v2__field">
                 <span>버전</span>
                 <input
+                  className="aol-mono"
                   min={1}
                   type="number"
                   value={selectedConfigFile.version}
@@ -235,62 +292,38 @@ export function ConfigLibraryPanel({
                   }
                 />
               </label>
+              <label className="config-v2__field config-v2__field--tags">
+                <span>태그</span>
+                <input
+                  value={tagInputValue(selectedConfigFile.tags)}
+                  onChange={(event) => onUpdateConfigFile(selectedConfigFile.id, { tags: parseTagInput(event.target.value) })}
+                />
+              </label>
             </div>
-            <label>
-              <span>태그</span>
-              <input
-                value={tagInputValue(selectedConfigFile.tags)}
-                onChange={(event) => onUpdateConfigFile(selectedConfigFile.id, { tags: parseTagInput(event.target.value) })}
-              />
-            </label>
-            <label>
-              <span>본문</span>
-              <textarea
-                value={selectedConfigFile.body}
-                onChange={(event) => onUpdateConfigFile(selectedConfigFile.id, { body: event.target.value })}
-              />
-            </label>
-            <div className="config-save-note">
-              <Save size={13} />
-              <span>
-                이 본문은 앱 내장 예시·라이브러리 항목이며, 위 경로(<code>{selectedConfigFile.path}</code>)는 논리적
-                표시일 뿐 디스크의 실제 파일을 읽거나 쓰지 않습니다. <strong>저장은 Event Storage 이벤트로만 남고
-                파일에는 반영되지 않습니다</strong>(새로고침 시 초기값으로 복원). 실제 파일은 불러오기/다운로드로
-                로컬 Markdown과 주고받습니다.
-              </span>
-            </div>
-          </div>
-        ) : null}
-      </div>
+          </details>
+        </div>
+      ) : (
+        <div className="config-v2__editor config-v2__editor--empty" style={{ gridArea: "editor" }}>
+          <p>이 종류의 설정파일이 없습니다. 새로 만들기로 첫 파일을 추가하세요.</p>
+        </div>
+      )}
 
-      <div className="config-profile-pack-list">
-        <div className="config-section-title">
+      <div className="config-v2__feed" style={{ gridArea: "feed" }}>
+        <div className="config-v2__section-title">
           <Package size={14} />
           <strong>프로필 팩</strong>
         </div>
-        {profilePacks.map((pack) => (
-          <article key={pack.id}>
-            <div>
+        <div className="config-v2__packs">
+          {profilePacks.map((pack) => (
+            <article className="config-v2__pack" key={pack.id}>
               <strong>{pack.label}</strong>
               <span>{agentRoleLabel(pack.agentRole)} / 설정파일 {pack.configFileIds.length}개</span>
               <p>{pack.description}</p>
-            </div>
-            <em>{pack.tags.join(" · ")}</em>
-          </article>
-        ))}
+              <em>{pack.tags.join(" · ")}</em>
+            </article>
+          ))}
+        </div>
       </div>
-
-      <div className="config-rule-strip">
-        <span>
-          <CheckCircle2 size={13} />
-          SOUL.md와 AGENTS.md는 충돌하지 않게 종류별 하나만 선택
-        </span>
-        <span>
-          <Tags size={13} />
-          라벨, 태그, 버전으로 같은 파일의 변형을 구분
-        </span>
-      </div>
-
     </section>
   );
 }

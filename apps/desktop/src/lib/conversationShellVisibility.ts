@@ -45,12 +45,15 @@ export function getConversationShellVisibility({
   }
 
   if (configLibraryActive) {
+    // config_files v2 (§0-B): the settings-file library is a minimal two-panel
+    // surface — drop the terminal/execution dock and the board toolbar
+    // (Queue/Coding Packet). Keep only the left icon rail for navigation.
     return {
       showCodingPacketPanel: false,
       showEvolveMementoPanel: false,
       showLeftRail: true,
-      showTerminalDock: true,
-      showToolbarActions: true,
+      showTerminalDock: false,
+      showToolbarActions: false,
       showWorkItemHandoffPanel: false,
     };
   }
