@@ -61,17 +61,17 @@ export function WorkItemCandidateNextStepPreviewCard({
     <section
       data-testid="wic-next-step-preview"
       data-risk={preview.risk}
-      className="mt-2 rounded-md border border-cyan-400/15 bg-cyan-400/[0.04] p-2"
+      className="mt-2 rounded-md border border-primary/15 bg-primary/[0.04] p-2"
     >
       <div className="mb-1 flex items-center justify-between gap-2">
-        <p className="text-[9px] font-semibold uppercase tracking-wider text-cyan-200/70">
+        <p className="text-[12px] font-semibold uppercase tracking-wider text-primary/70">
           Next-step preview
         </p>
-        <span className="rounded bg-cyan-300/10 px-1.5 py-0.5 text-[9px] uppercase text-cyan-100/80">
+        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[12px] uppercase text-primary/80">
           {preview.label}
         </span>
       </div>
-      <div className="space-y-1 text-[10px] text-zinc-300">
+      <div className="space-y-1 text-[12px] text-zinc-300">
         <p data-testid="wic-next-step-candidate" className="break-all">
           {preview.candidateId} · {preview.title}
         </p>
@@ -121,7 +121,7 @@ export function WorkItemCandidateNextStepPreviewCard({
           {preview.relatedDraftFootnotes.length > 0 ? (
             preview.relatedDraftFootnotes.map((ref) => (
               <div key={`${ref.footnote}-${ref.refId}`} className="flex items-center gap-1.5">
-                <span className="shrink-0 tabular-nums text-cyan-300/70">[{ref.footnote}]</span>
+                <span className="shrink-0 tabular-nums text-primary/70">[{ref.footnote}]</span>
                 <code className="shrink-0 rounded bg-background/70 px-1">{ref.refId}</code>
                 <span className="min-w-0 flex-1 truncate">{ref.label}</span>
               </div>
@@ -138,7 +138,7 @@ export function WorkItemCandidateNextStepPreviewCard({
             readiness · {readiness.readiness} · confidence · {readiness.confidence}
           </div>
         ) : null}
-        <div data-testid="wic-next-step-operator-note" className="break-all text-cyan-100/75">
+        <div data-testid="wic-next-step-operator-note" className="break-all text-primary/75">
           {preview.suggestedOperatorNote}
         </div>
       </div>
@@ -159,14 +159,14 @@ export function WorkItemCandidateReadinessSection({
       className="mt-2 rounded-md border border-emerald-400/15 bg-emerald-400/[0.04] p-2"
     >
       <div className="mb-1 flex items-center justify-between gap-2">
-        <p className="text-[9px] font-semibold uppercase tracking-wider text-emerald-200/70">
+        <p className="text-[12px] font-semibold uppercase tracking-wider text-emerald-200/70">
           Readiness / confidence
         </p>
-        <span className="rounded bg-emerald-300/10 px-1.5 py-0.5 text-[9px] uppercase text-emerald-100/80">
+        <span className="rounded bg-emerald-300/10 px-1.5 py-0.5 text-[12px] uppercase text-emerald-100/80">
           {readiness.label}
         </span>
       </div>
-      <div className="space-y-1 text-[10px] text-zinc-300">
+      <div className="space-y-1 text-[12px] text-zinc-300">
         <div data-testid="wic-readiness-state" className="flex flex-wrap items-center gap-1">
           <span className={`${CHIP_BASE} ${WIC_READINESS_TONE[readiness.readiness]}`}>
             {readiness.readiness}
@@ -200,15 +200,15 @@ function WorkItemCandidateTraceRow({ event }: { event: WorkItemCandidateTraceEve
     <li
       data-testid={`wic-trace-event-${event.kind}-${event.id}`}
       data-kind={event.kind}
-      className="rounded border border-white/[0.06] bg-white/[0.025] p-1.5 text-[10px] text-zinc-300"
+      className="rounded border border-white/[0.06] bg-white/[0.025] p-1.5 text-[12px] text-zinc-300"
     >
       <div className="mb-0.5 flex flex-wrap items-center gap-1">
         <span className={`${CHIP_BASE} ${WIC_TRACE_TONE[event.kind]}`}>{event.kind}</span>
-        <span className="rounded bg-white/[0.04] px-1 text-[9px] uppercase text-muted-foreground/65">
+        <span className="rounded bg-white/[0.04] px-1 text-[12px] uppercase text-muted-foreground/65">
           {event.timeLabel}
         </span>
         {event.refStatus ? (
-          <span className="rounded bg-white/[0.04] px-1 text-[9px] uppercase text-muted-foreground/65">
+          <span className="rounded bg-white/[0.04] px-1 text-[12px] uppercase text-muted-foreground/65">
             {event.refStatus}
           </span>
         ) : null}
@@ -240,15 +240,15 @@ export function WorkItemCandidateTraceTimeline({ trace }: { trace: WorkItemCandi
       className="mt-2 rounded-md border border-amber-300/15 bg-amber-300/[0.035] p-2"
     >
       <div className="mb-1 flex items-center justify-between gap-2">
-        <p className="text-[9px] font-semibold uppercase tracking-wider text-amber-100/75">
+        <p className="text-[12px] font-semibold uppercase tracking-wider text-amber-100/75">
           Trace timeline
         </p>
-        <span className="rounded bg-amber-300/10 px-1.5 py-0.5 text-[9px] uppercase text-amber-100/75">
+        <span className="rounded bg-amber-300/10 px-1.5 py-0.5 text-[12px] uppercase text-amber-100/75">
           {trace.label}
         </span>
       </div>
       {trace.empty ? (
-        <p data-testid="wic-trace-empty" className="mb-1 text-[10px] text-muted-foreground/70">
+        <p data-testid="wic-trace-empty" className="mb-1 text-[12px] text-muted-foreground/70">
           no source/evidence trace refs yet · {trace.missing.join(", ")}
         </p>
       ) : null}
@@ -274,15 +274,15 @@ export function WorkItemCandidateRunnerSignalsSection({
       className="mt-2 rounded-md border border-emerald-400/15 bg-emerald-400/[0.035] p-2"
     >
       <div className="mb-1 flex items-center justify-between gap-2">
-        <p className="text-[9px] font-semibold uppercase tracking-wider text-emerald-200/70">
+        <p className="text-[12px] font-semibold uppercase tracking-wider text-emerald-200/70">
           Runner Signals
         </p>
-        <span className="rounded bg-emerald-300/10 px-1.5 py-0.5 text-[9px] uppercase text-emerald-100/75">
+        <span className="rounded bg-emerald-300/10 px-1.5 py-0.5 text-[12px] uppercase text-emerald-100/75">
           local detail
         </span>
       </div>
       {signals.length === 0 ? (
-        <p data-testid="wic-runner-signals-empty" className="text-[10px] text-muted-foreground/70">
+        <p data-testid="wic-runner-signals-empty" className="text-[12px] text-muted-foreground/70">
           {link?.unresolvedRefs.length
             ? `runner refs unresolved · ${link.unresolvedRefs.join(", ")}`
             : "no matching runner signals"}
@@ -293,7 +293,7 @@ export function WorkItemCandidateRunnerSignalsSection({
             <li
               key={signal.id}
               data-testid={`wic-runner-signal-${signal.runnerId}`}
-              className="rounded border border-white/[0.06] bg-white/[0.025] p-1.5 text-[10px] text-zinc-300"
+              className="rounded border border-white/[0.06] bg-white/[0.025] p-1.5 text-[12px] text-zinc-300"
             >
               <div className="mb-0.5 flex flex-wrap items-center gap-1">
                 <span className={`${CHIP_BASE} ${signal.signal === "runner-stalled" ? TONE.bad : TONE.info}`}>
@@ -335,15 +335,15 @@ export function WorkItemCandidatePatchSignalsSection({
       className="mt-2 rounded-md border border-amber-400/15 bg-amber-400/[0.035] p-2"
     >
       <div className="mb-1 flex items-center justify-between gap-2">
-        <p className="text-[9px] font-semibold uppercase tracking-wider text-amber-200/70">
+        <p className="text-[12px] font-semibold uppercase tracking-wider text-amber-200/70">
           Patch Signals
         </p>
-        <span className="rounded bg-amber-300/10 px-1.5 py-0.5 text-[9px] uppercase text-amber-100/75">
+        <span className="rounded bg-amber-300/10 px-1.5 py-0.5 text-[12px] uppercase text-amber-100/75">
           local detail
         </span>
       </div>
       {signals.length === 0 ? (
-        <p data-testid="wic-patch-signals-empty" className="text-[10px] text-muted-foreground/70">
+        <p data-testid="wic-patch-signals-empty" className="text-[12px] text-muted-foreground/70">
           {link?.unresolvedRefs.length
             ? `patch refs unresolved · ${link.unresolvedRefs.join(", ")}`
             : "no matching patch signals"}
@@ -355,7 +355,7 @@ export function WorkItemCandidatePatchSignalsSection({
               key={signal.id}
               data-testid={`wic-patch-signal-${signal.patchCandidateId}-${signal.signal}`}
               data-verification={signal.verificationStatus}
-              className="rounded border border-white/[0.06] bg-white/[0.025] p-1.5 text-[10px] text-zinc-300"
+              className="rounded border border-white/[0.06] bg-white/[0.025] p-1.5 text-[12px] text-zinc-300"
             >
               <div className="mb-0.5 flex flex-wrap items-center gap-1">
                 <span className={`${CHIP_BASE} ${signal.signal === "patch-blocked" ? TONE.bad : TONE.warn}`}>
@@ -395,20 +395,20 @@ export function WorkItemCandidateLearningMemorySignalsSection({
     <section
       data-testid="wic-learning-memory-signals-section"
       data-count={signals.length}
-      className="mt-2 rounded-md border border-violet-400/15 bg-violet-400/[0.035] p-2"
+      className="mt-2 rounded-md border border-primary/15 bg-primary/[0.035] p-2"
     >
       <div className="mb-1 flex items-center justify-between gap-2">
-        <p className="text-[9px] font-semibold uppercase tracking-wider text-violet-200/70">
+        <p className="text-[12px] font-semibold uppercase tracking-wider text-primary/70">
           Learning/Memory Signals
         </p>
-        <span className="rounded bg-violet-300/10 px-1.5 py-0.5 text-[9px] uppercase text-violet-100/75">
+        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[12px] uppercase text-primary/75">
           aggregate only
         </span>
       </div>
       {signals.length === 0 ? (
         <p
           data-testid="wic-learning-memory-signals-empty"
-          className="text-[10px] text-muted-foreground/70"
+          className="text-[12px] text-muted-foreground/70"
         >
           {link?.unresolvedRefs.length
             ? `learning/memory refs unresolved · ${link.unresolvedRefs.join(", ")}`
@@ -420,7 +420,7 @@ export function WorkItemCandidateLearningMemorySignalsSection({
             <li
               key={signal.id}
               data-testid={`wic-learning-memory-signal-${signal.signal}`}
-              className="rounded border border-white/[0.06] bg-white/[0.025] p-1.5 text-[10px] text-zinc-300"
+              className="rounded border border-white/[0.06] bg-white/[0.025] p-1.5 text-[12px] text-zinc-300"
             >
               <div className="mb-0.5 flex flex-wrap items-center gap-1">
                 <span

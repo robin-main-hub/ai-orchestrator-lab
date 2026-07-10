@@ -95,7 +95,7 @@ export function RuntimeManifestPreviewCard({
                 <code className="rounded bg-background/70 px-1">{entry.name}</code>
                 {!entry.loadable && entry.reason ? (
                   <span
-                    className="text-[11px] text-rose-300/80"
+                    className="text-[12px] text-rose-300/80"
                     data-testid={`runtime-manifest-reason-${entry.id}`}
                     data-reason={entry.reason}
                   >

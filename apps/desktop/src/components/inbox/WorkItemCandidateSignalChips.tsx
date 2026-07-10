@@ -63,17 +63,17 @@ export function WorkItemCandidateSignalSummarySection({
       data-testid="wic-signal-summary"
       data-origin={summary.originKind}
       data-signal-count={summary.signalCount}
-      className="mt-2 rounded-md border border-indigo-300/15 bg-indigo-300/[0.035] p-2"
+      className="mt-2 rounded-md border border-primary/15 bg-primary/[0.035] p-2"
     >
       <div className="mb-1 flex items-center justify-between gap-2">
-        <p className="text-[9px] font-semibold uppercase tracking-wider text-indigo-100/75">
+        <p className="text-[12px] font-semibold uppercase tracking-wider text-primary/75">
           Signal origin · ref only
         </p>
-        <span className="rounded bg-indigo-300/10 px-1.5 py-0.5 text-[9px] uppercase text-indigo-100/75">
+        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[12px] uppercase text-primary/75">
           local detail
         </span>
       </div>
-      <div className="space-y-1 text-[10px] text-zinc-300">
+      <div className="space-y-1 text-[12px] text-zinc-300">
         <div className="flex flex-wrap items-center gap-1">
           <span>origin · {summary.originKind}</span>
           <span>signals · {summary.signalCount}</span>
