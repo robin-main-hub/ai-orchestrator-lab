@@ -17,13 +17,13 @@ describe("CodingWorkbench 사이드바 좌우 리사이저 (jsdom)", () => {
     const handle = screen.getByRole("separator", { name: "사이드바 폭 조절" });
     expect(handle.getAttribute("aria-orientation")).toBe("vertical");
     const workbench = container.querySelector(".coding-workbench") as HTMLElement;
-    expect(workbench.style.gridTemplateColumns).toBe("252px 6px minmax(0, 1fr)"); // 기본 252
+    expect(workbench.style.getPropertyValue("--coding-rail-w")).toBe("252px"); // 기본 252
 
     fireEvent.keyDown(handle, { key: "ArrowRight" });
-    expect(workbench.style.gridTemplateColumns).toBe("268px 6px minmax(0, 1fr)"); // +16
+    expect(workbench.style.getPropertyValue("--coding-rail-w")).toBe("268px"); // +16
 
     fireEvent.keyDown(handle, { key: "ArrowLeft" });
-    expect(workbench.style.gridTemplateColumns).toBe("252px 6px minmax(0, 1fr)"); // -16
+    expect(workbench.style.getPropertyValue("--coding-rail-w")).toBe("252px"); // -16
   });
 
   it("조절한 폭은 localStorage에 저장된다", () => {

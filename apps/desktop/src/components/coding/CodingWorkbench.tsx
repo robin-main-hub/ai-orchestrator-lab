@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState , useSyncExternalStore} from "react";
-import type { ChangeEvent, ClipboardEvent, PointerEvent as ReactPointerEvent } from "react";
+import type { ChangeEvent, ClipboardEvent, CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { AlertTriangle, CircleStop, FileDiff, GitBranch, Hammer, PanelRightOpen, Paperclip, Plus, RefreshCcw, RotateCcw, Send, ShieldCheck, Telescope, Terminal, Trash2, X, XCircle } from "lucide-react";
 import type { ModelDescriptor, ProviderCompletionAttachment, ProviderProfile, TmuxPaneRole } from "@ai-orchestrator/protocol";
 import { StatusBadge } from "@/ui/status-badge";
@@ -772,7 +772,7 @@ export function CodingWorkbench({
     <div
       className="coding-workbench"
       ref={workbenchRef}
-      style={{ gridTemplateColumns: `${sidebarWidth}px 6px minmax(0, 1fr)` }}
+      style={{ "--coding-rail-w": `${sidebarWidth}px` } as CSSProperties}
     >
       <aside className="coding-sidebar">
         <button className="coding-sidebar__new" onClick={newSession} type="button">
