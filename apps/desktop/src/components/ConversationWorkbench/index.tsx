@@ -532,7 +532,7 @@ export function ConversationWorkbench({
             <div className="mr-1 hidden items-center rounded-lg border border-white/10 bg-white/[0.03] p-0.5 md:inline-flex">
               <button
                 aria-pressed={viewMode === "chat"}
-                className={`rounded-md px-2 py-1 text-[11px] font-medium transition ${viewMode === "chat" ? "bg-violet-400/15 text-violet-100" : "text-zinc-400 hover:text-zinc-100"}`}
+                className={`rounded-md px-2 py-1 text-[11px] font-medium transition ${viewMode === "chat" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"}`}
                 onClick={() => onChangeViewMode("chat")}
                 title="대화 중심 뷰"
                 type="button"
@@ -541,7 +541,7 @@ export function ConversationWorkbench({
               </button>
               <button
                 aria-pressed={viewMode === "agents"}
-                className={`rounded-md px-2 py-1 text-[11px] font-medium transition ${viewMode === "agents" ? "bg-violet-400/15 text-violet-100" : "text-zinc-400 hover:text-zinc-100"}`}
+                className={`rounded-md px-2 py-1 text-[11px] font-medium transition ${viewMode === "agents" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"}`}
                 onClick={() => onChangeViewMode("agents")}
                 title="에이전트 상세·스킬·기억·위임 뷰"
                 type="button"
