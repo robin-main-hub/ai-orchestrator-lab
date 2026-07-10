@@ -65,13 +65,13 @@ export function AgentQuickSwitchPanel({
 
   return (
     <section
-      className="rounded-lg border border-white/10 bg-zinc-950/55 p-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300/40"
+      className="rounded-lg border border-white/10 bg-surface/55 p-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
       data-focus-id="agent-quick-switch-panel"
       tabIndex={-1}
     >
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <button
-          className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/25 px-2.5 py-1 text-[10px] font-semibold text-zinc-300 transition hover:border-cyan-300/30 hover:bg-cyan-400/[0.08] hover:text-cyan-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40 disabled:cursor-not-allowed disabled:opacity-45"
+          className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/25 px-2.5 py-1 text-[10px] font-semibold text-foreground transition hover:border-primary/30 hover:bg-primary/[0.08] hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-45"
           disabled={!onBack}
           onClick={onBack}
           type="button"
@@ -80,7 +80,7 @@ export function AgentQuickSwitchPanel({
           ← Agents로 돌아가기
         </button>
         <button
-          className="inline-flex items-center gap-1.5 rounded-full border border-violet-300/20 bg-violet-400/10 px-2.5 py-1 text-[10px] font-semibold text-violet-100 transition hover:border-violet-200/40 hover:bg-violet-400/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300/40 disabled:cursor-not-allowed disabled:opacity-45"
+          className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[10px] font-semibold text-primary transition hover:border-primary/40 hover:bg-primary/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-45"
           disabled={!canRefreshModels || refreshingModels}
           onClick={handleRefreshModels}
           type="button"
@@ -92,17 +92,17 @@ export function AgentQuickSwitchPanel({
 
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-violet-200/80">
+          <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-primary/80">
             <Sparkles className="h-3 w-3" />
             원클릭 전환
           </p>
-          <p className="mt-1 text-sm font-semibold text-zinc-100">{agentName} 설정을 바로 바꿉니다</p>
-          <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
+          <p className="mt-1 text-sm font-semibold text-foreground">{agentName} 설정을 바로 바꿉니다</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
             대화 중에도 공급자, 모델, SOUL, AGENTS 지침을 한 번에 전환합니다.
             {onRefreshModels ? " 패널을 열 때 표시된 공급업체 모델을 다시 확인합니다." : ""}
           </p>
         </div>
-        <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] text-zinc-400">
+        <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] text-muted-foreground">
           현재 {formatModelDisplayName(selectedAgent.modelId ?? selectedProvider?.defaultModel ?? "모델 대기")}
         </span>
       </div>
@@ -180,13 +180,13 @@ function ProviderModelSwitchBoard({
 }) {
   return (
     <div className="mt-3">
-      <p className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-        <KeyRound className="h-3 w-3 text-zinc-400" />
+      <p className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <KeyRound className="h-3 w-3 text-muted-foreground" />
         공급업체별 모델
       </p>
       {groups.length > 0 ? (
         <div
-          className="max-h-80 space-y-2 overflow-y-auto overscroll-contain pr-1 [scrollbar-color:rgba(34,211,238,0.35)_rgba(24,24,27,0.45)] [scrollbar-width:thin]"
+          className="max-h-80 space-y-2 overflow-y-auto overscroll-contain pr-1 [scrollbar-color:var(--accent-dim)_rgba(24,24,27,0.45)] [scrollbar-width:thin]"
           data-testid="agent-model-scroll-region"
         >
           {groups.map(({ entries, label }) => {
@@ -196,7 +196,7 @@ function ProviderModelSwitchBoard({
               <article
                 className={`rounded-lg border p-2 ${
                   providerActive
-                    ? "border-cyan-300/25 bg-cyan-400/[0.055]"
+                    ? "border-primary/25 bg-primary/[0.055]"
                     : "border-white/10 bg-black/20"
                 }`}
                 key={label}
@@ -204,12 +204,12 @@ function ProviderModelSwitchBoard({
                 <div className="mb-2 flex min-w-0 items-center justify-between gap-2">
                   <span
                     className={`min-w-0 rounded-md px-2 py-1 text-left text-[11px] font-semibold ${
-                      providerActive ? "bg-cyan-400/12 text-cyan-100" : "text-zinc-200"
+                      providerActive ? "bg-primary/12 text-primary" : "text-foreground"
                     }`}
                   >
                     <span className="block truncate">{label}</span>
                   </span>
-                  <span className="shrink-0 text-[9px] text-zinc-600">{modelOptions.length}개 모델</span>
+                  <span className="shrink-0 text-[9px] text-muted-foreground">{modelOptions.length}개 모델</span>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {modelOptions.length > 0 ? (
@@ -245,12 +245,12 @@ function ProviderModelSwitchBoard({
           })}
         </div>
       ) : (
-        <span className="rounded-full border border-zinc-800 bg-zinc-950/70 px-2.5 py-1 text-[10px] text-zinc-500">
+        <span className="rounded-full border border-border bg-surface/70 px-2.5 py-1 text-[10px] text-muted-foreground">
           등록된 API/OAuth 대기
         </span>
       )}
       {visibleModelCount === 0 && groups.length > 0 ? (
-        <p className="mt-1 text-[10px] text-zinc-600">현재 공급업체의 모델 목록은 아직 대기 중입니다.</p>
+        <p className="mt-1 text-[10px] text-muted-foreground">현재 공급업체의 모델 목록은 아직 대기 중입니다.</p>
       ) : null}
     </div>
   );
@@ -357,8 +357,8 @@ function QuickSwitchGroup({
 }) {
   return (
     <div className="mt-3">
-      <p className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-        <Icon className="h-3 w-3 text-zinc-400" />
+      <p className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <Icon className="h-3 w-3 text-muted-foreground" />
         {label}
       </p>
       <div className="flex flex-wrap gap-1.5">{children}</div>
@@ -380,8 +380,8 @@ function QuickSwitchButton({
       aria-pressed={active}
       className={`max-w-full rounded-full border px-2.5 py-1 text-[10px] font-medium leading-snug transition ${
         active
-          ? "border-cyan-300/40 bg-cyan-400/12 text-cyan-100 shadow-[0_0_18px_rgba(34,211,238,0.08)]"
-          : "border-white/10 bg-black/25 text-zinc-300 hover:border-violet-300/30 hover:bg-violet-500/10 hover:text-violet-100"
+          ? "border-primary/40 bg-primary/12 text-primary shadow-[0_0_18px_var(--accent-dim)]"
+          : "border-white/10 bg-black/25 text-foreground hover:border-primary/30 hover:bg-primary/10 hover:text-primary"
       }`}
       onClick={onClick}
       title={label}

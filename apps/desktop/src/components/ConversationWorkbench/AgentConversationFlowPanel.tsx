@@ -8,9 +8,9 @@ import {
 import type { WorkbenchAgent } from "../../types";
 
 const toneClassNames: Record<AgentConversationFlowTone, string> = {
-  ready: "border-emerald-400/20 bg-emerald-400/[0.06] text-emerald-100",
-  manual: "border-cyan-400/20 bg-cyan-400/[0.06] text-cyan-100",
-  error: "border-rose-400/25 bg-rose-500/[0.08] text-rose-100",
+  ready: "border-primary/20 bg-primary/[0.06] text-primary",
+  manual: "border-primary/20 bg-primary/[0.06] text-primary",
+  error: "border-destructive/25 bg-destructive/[0.08] text-destructive",
 };
 
 export function AgentConversationFlowPanel({
@@ -42,7 +42,7 @@ export function AgentConversationFlowPanel({
   });
 
   return (
-    <div className="border-b border-white/10 bg-zinc-950/85 px-4 py-2 backdrop-blur-xl">
+    <div className="border-b border-white/10 bg-surface/85 px-4 py-2 backdrop-blur-xl">
       <div className="mx-auto grid max-w-6xl gap-2 md:grid-cols-2 xl:grid-cols-4">
         {cards.map((card) => (
           <section
